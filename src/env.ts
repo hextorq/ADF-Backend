@@ -9,7 +9,7 @@ const envSchema = z.object({
   ADMIN_EMAIL: z.string().email(),
   ADMIN_PASSWORD: z.string().min(1),
   COOKIE_NAME: z.string().default("adf_session"),
-  FRONTEND_ORIGIN: z.string().url(),
+  FRONTEND_ORIGIN: z.string().min(1),
   NODE_ENV: z.string().default("development"),
 });
 
