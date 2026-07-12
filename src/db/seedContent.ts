@@ -723,15 +723,47 @@ seed(
   "Text edits, image URL edits, and uploaded images are saved through the backend CMS API into PostgreSQL. Visitors see the saved content automatically."
 );
 
+const resetExistingContent = process.argv.includes("--reset") || process.env.SEED_CONTENT_RESET === "true";
+
 async function main() {
+  let inserted = 0;
+  let updated = 0;
+  let skipped = 0;
+
   for (const [key, value] of Object.entries(seedItems)) {
-    await pool.query(
-      `INSERT INTO content_items (key, value) VALUES ($1, $2)
-       ON CONFLICT (key) DO NOTHING`,
-      [key, value]
-    );
+    if (resetExistingContent) {
+      const result = await pool.query(
+        `INSERT INTO content_items (key, value, updated_at) VALUES ($1, $2, now())
+         ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = now()
+         RETURNING (xmax = 0) AS inserted`,
+        [key, value]
+      );
+
+      if (result.rows[0]?.inserted) {
+        inserted += 1;
+      } else {
+        updated += 1;
+      }
+    } else {
+      const result = await pool.query(
+        `INSERT INTO content_items (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO NOTHING`,
+        [key, value]
+      );
+
+      if (result.rowCount === 1) {
+        inserted += 1;
+      } else {
+        skipped += 1;
+      }
+    }
   }
-  console.log(`seeded ${Object.keys(seedItems).length} content items`);
+
+  console.log(
+    resetExistingContent
+      ? `seeded ${Object.keys(seedItems).length} content items (${inserted} inserted, ${updated} reset)`
+      : `seeded ${Object.keys(seedItems).length} content items (${inserted} inserted, ${skipped} already existed)`
+  );
   await pool.end();
 }
 

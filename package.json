@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "migrate": "tsx src/db/migrate.ts",
-    "seed:content": "tsx src/db/seedContent.ts"
+    "seed:content": "tsx src/db/seedContent.ts",
+    "seed:content:reset": "tsx src/db/seedContent.ts --reset"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
