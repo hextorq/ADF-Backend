@@ -6,6 +6,7 @@ declare global {
   namespace Express {
     interface Request {
       isAdmin?: boolean;
+      adminEmail?: string;
     }
   }
 }
@@ -21,5 +22,6 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
     return res.status(401).json({ error: "Not authenticated" });
   }
   req.isAdmin = true;
+  req.adminEmail = env.ADMIN_EMAIL;
   next();
 }

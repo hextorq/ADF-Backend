@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
-import { getAllContent, upsertContent } from "./content.service.js";
+import { getAllContent, getRecentContentEdits, upsertContent } from "./content.service.js";
 
 export async function listContent(_req: Request, res: Response) {
   const items = await getAllContent();
@@ -18,6 +18,11 @@ export async function updateContent(req: Request, res: Response) {
   }
 
   const key = req.params.key;
-  const row = await upsertContent(key, parsed.data.value);
+  const row = await upsertContent(key, parsed.data.value, req.adminEmail ?? "admin");
   res.json(row);
+}
+
+export async function listRecentContentEdits(_req: Request, res: Response) {
+  const edits = await getRecentContentEdits(20);
+  res.json({ edits });
 }
