@@ -11,8 +11,14 @@ declare global {
   }
 }
 
+function readBearerToken(req: Request): string | null {
+  const header = req.get("authorization");
+  if (!header?.toLowerCase().startsWith("bearer ")) return null;
+  return header.slice(7).trim() || null;
+}
+
 export function readAdminStatus(req: Request): boolean {
-  const token = req.cookies?.[env.COOKIE_NAME];
+  const token = readBearerToken(req) ?? req.cookies?.[env.COOKIE_NAME];
   if (!token) return false;
   return verifyAdminToken(token) !== null;
 }

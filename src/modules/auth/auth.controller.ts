@@ -33,7 +33,7 @@ export function login(req: Request, res: Response) {
     ...cookieOptions,
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
-  res.json({ user: { email, role: "admin" } });
+  res.json({ token, user: { email, role: "admin" } });
 }
 
 export function logout(_req: Request, res: Response) {
