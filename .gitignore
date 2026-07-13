@@ -2,3 +2,4 @@ node_modules/
 dist/
 .env
 /uploads/
+local-backend*.log
