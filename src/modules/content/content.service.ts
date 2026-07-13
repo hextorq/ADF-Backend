@@ -20,11 +20,19 @@ export interface ContentAuditLog {
   created_at: string;
 }
 
-export async function upsertContent(key: string, value: string, adminEmail: string) {
+interface UpsertContentResult {
+  key: string;
+  value: string;
+  updated_at: string;
+  old_value: string | null;
+}
+
+export async function upsertContent(key: string, value: string): Promise<UpsertContentResult> {
   const { rows } = await pool.query<{
     key: string;
     value: string;
     updated_at: string;
+    old_value: string | null;
   }>(
     `WITH previous AS (
        SELECT value FROM content_items WHERE key = $1
@@ -34,19 +42,27 @@ export async function upsertContent(key: string, value: string, adminEmail: stri
        VALUES ($1, $2, now())
        ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = now()
        RETURNING key, value, updated_at
-     ),
-     audit AS (
-       INSERT INTO content_audit_logs (content_key, old_value, new_value, admin_email)
-       SELECT upserted.key, previous.value, upserted.value, $3
-       FROM upserted
-       LEFT JOIN previous ON true
-       WHERE previous.value IS DISTINCT FROM upserted.value
-       RETURNING id
      )
-     SELECT key, value, updated_at FROM upserted`,
-    [key, value, adminEmail]
+     SELECT upserted.key, upserted.value, upserted.updated_at, previous.value AS old_value
+     FROM upserted
+     LEFT JOIN previous ON true`,
+    [key, value]
   );
   return rows[0];
+}
+
+export async function recordContentAuditLog(
+  key: string,
+  oldValue: string | null,
+  newValue: string,
+  adminEmail: string
+) {
+  if (oldValue === newValue) return;
+  await pool.query(
+    `INSERT INTO content_audit_logs (content_key, old_value, new_value, admin_email)
+     VALUES ($1, $2, $3, $4)`,
+    [key, oldValue, newValue, adminEmail]
+  );
 }
 
 export async function getRecentContentEdits(limit = 20): Promise<ContentAuditLog[]> {

@@ -9,6 +9,7 @@ import { contentRouter } from "./modules/content/content.routes.js";
 import { formsRouter } from "./modules/forms/forms.routes.js";
 import { uploadsRouter } from "./modules/uploads/uploads.routes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { requestTiming } from "./middleware/requestTiming.js";
 
 export const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -25,9 +26,11 @@ app.use(cors({
     callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
+  exposedHeaders: ["X-CMS-DB-Time"],
 }));
 app.use(cookieParser());
 app.use(express.json());
+app.use(requestTiming);
 app.use("/uploads", express.static(uploadsDir));
 
 app.use("/api/auth", authRouter);

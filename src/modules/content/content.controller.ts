@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
-import { getAllContent, getRecentContentEdits, upsertContent } from "./content.service.js";
+import { getAllContent, getRecentContentEdits, recordContentAuditLog, upsertContent } from "./content.service.js";
 
 export async function listContent(_req: Request, res: Response) {
   const items = await getAllContent();
@@ -18,8 +18,16 @@ export async function updateContent(req: Request, res: Response) {
   }
 
   const key = req.params.key;
-  const row = await upsertContent(key, parsed.data.value, req.adminEmail ?? "admin");
-  res.json(row);
+  const startedAt = performance.now();
+  const row = await upsertContent(key, parsed.data.value);
+  const dbMs = performance.now() - startedAt;
+
+  res.setHeader("X-CMS-DB-Time", `${dbMs.toFixed(1)}ms`);
+  res.json({ key: row.key, value: row.value, updated_at: row.updated_at });
+
+  recordContentAuditLog(key, row.old_value, row.value, req.adminEmail ?? "admin").catch((err) => {
+    console.error("Failed to write content audit log", err);
+  });
 }
 
 export async function listRecentContentEdits(_req: Request, res: Response) {
