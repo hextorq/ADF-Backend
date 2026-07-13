@@ -9,7 +9,7 @@ function getClientIp(req: Request) {
 export function requestTiming(req: Request, res: Response, next: NextFunction) {
   const startedAt = performance.now();
   res.on("finish", () => {
-    if (!req.path.startsWith("/api/")) return;
+    if (!req.originalUrl.startsWith("/api/")) return;
     const elapsedMs = performance.now() - startedAt;
     const cmsDbTime = res.getHeader("X-CMS-DB-Time");
     const level = res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info";
