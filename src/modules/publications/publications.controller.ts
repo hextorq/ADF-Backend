@@ -1,12 +1,12 @@
 import type { Request, Response } from "express";
-import { query } from "../../db/db.js";
+import { pool } from "../../db/pool.js";
 import { sendNotificationEmail } from "../../lib/notifications.js";
 
 // --- LITERARY PUBLICATIONS ADMIN ---
 
 export const getLiterarySubmissions = async (req: Request, res: Response) => {
   try {
-    const result = await query(
+    const result = await pool.query(
       "SELECT id, book_title, author_name, book_genre, package_id, payment_status, current_stage, editor_assigned, isbn, created_at FROM literary_submissions ORDER BY created_at DESC"
     );
     res.json(result.rows);
@@ -43,7 +43,7 @@ export const updateLiteraryStage = async (req: Request, res: Response) => {
     }
 
     values.push(id);
-    const result = await query(
+    const result = await pool.query(
       `UPDATE literary_submissions SET ${updates.join(", ")} WHERE id = $${paramIndex} RETURNING *`,
       values
     );
@@ -72,7 +72,7 @@ export const publishToBookStore = async (req: Request, res: Response) => {
   
   try {
     // Get the submission
-    const subResult = await query("SELECT * FROM literary_submissions WHERE id = $1", [id]);
+    const subResult = await pool.query("SELECT * FROM literary_submissions WHERE id = $1", [id]);
     const sub = subResult.rows[0];
     if (!sub) return res.status(404).json({ error: "Submission not found" });
     
@@ -86,16 +86,16 @@ export const publishToBookStore = async (req: Request, res: Response) => {
     // For simplicity, we just create an author if they don't exist by name.
     
     let authorId;
-    const authorRes = await query("SELECT id FROM authors WHERE name = $1 LIMIT 1", [sub.author_name]);
+    const authorRes = await pool.query("SELECT id FROM authors WHERE name = $1 LIMIT 1", [sub.author_name]);
     if (authorRes.rows.length > 0) {
       authorId = authorRes.rows[0].id;
     } else {
-      const newAuth = await query("INSERT INTO authors (name, bio) VALUES ($1, $2) RETURNING id", [sub.author_name, sub.author_bio || '']);
+      const newAuth = await pool.query("INSERT INTO authors (name, bio) VALUES ($1, $2) RETURNING id", [sub.author_name, sub.author_bio || '']);
       authorId = newAuth.rows[0].id;
     }
 
     const price = 15.99; // Default mocked price for new publications
-    const bookRes = await query(
+    const bookRes = await pool.query(
       `INSERT INTO books (title, author_id, cover_image, price, original_price, category, format, is_new_release, isbn, synopsis) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
       [sub.book_title, authorId, sub.cover_url || '', price, null, sub.book_genre, 'Paperback', true, sub.isbn || '', sub.synopsis]
@@ -103,7 +103,7 @@ export const publishToBookStore = async (req: Request, res: Response) => {
     const bookId = bookRes.rows[0].id;
 
     // Link back to submission
-    await query("UPDATE literary_submissions SET book_store_id = $1, current_stage = 'Book Store' WHERE id = $2", [bookId, id]);
+    await pool.query("UPDATE literary_submissions SET book_store_id = $1, current_stage = 'Book Store' WHERE id = $2", [bookId, id]);
 
     await sendNotificationEmail({
       to: sub.author_email,
@@ -123,7 +123,7 @@ export const publishToBookStore = async (req: Request, res: Response) => {
 
 export const getChapterVolumes = async (req: Request, res: Response) => {
   try {
-    const result = await query("SELECT * FROM chapter_volumes ORDER BY created_at DESC");
+    const result = await pool.query("SELECT * FROM chapter_volumes ORDER BY created_at DESC");
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch volumes" });
@@ -133,7 +133,7 @@ export const getChapterVolumes = async (req: Request, res: Response) => {
 export const createChapterVolume = async (req: Request, res: Response) => {
   const { title, theme, description, submission_deadline } = req.body;
   try {
-    const result = await query(
+    const result = await pool.query(
       "INSERT INTO chapter_volumes (title, theme, description, submission_deadline) VALUES ($1, $2, $3, $4) RETURNING *",
       [title, theme, description, submission_deadline]
     );
@@ -153,10 +153,10 @@ export const submitChapter = async (req: Request, res: Response) => {
   const submissionId = `CHAP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
   try {
-    await query("BEGIN");
+    await pool.query("BEGIN");
     
     // Insert Submission
-    await query(
+    await pool.query(
       `INSERT INTO chapter_submissions (id, volume_id, chapter_title, abstract, keywords, manuscript_url) 
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [submissionId, volume_id, chapter_title, abstract, keywords, manuscriptUrl]
@@ -168,14 +168,14 @@ export const submitChapter = async (req: Request, res: Response) => {
       const parsed = JSON.parse(authors);
       for (const auth of parsed) {
         if (auth.is_primary) primaryEmail = auth.email;
-        await query(
+        await pool.query(
           `INSERT INTO chapter_authors (submission_id, is_primary, name, email, institution) VALUES ($1, $2, $3, $4, $5)`,
           [submissionId, auth.is_primary, auth.name, auth.email, auth.institution]
         );
       }
     }
 
-    await query("COMMIT");
+    await pool.query("COMMIT");
 
     if (primaryEmail) {
       await sendNotificationEmail({
@@ -187,7 +187,7 @@ export const submitChapter = async (req: Request, res: Response) => {
 
     res.json({ success: true, submissionId });
   } catch (err) {
-    await query("ROLLBACK");
+    await pool.query("ROLLBACK");
     console.error(err);
     res.status(500).json({ error: "Failed to submit chapter" });
   }
@@ -195,7 +195,7 @@ export const submitChapter = async (req: Request, res: Response) => {
 
 export const getChapterSubmissions = async (req: Request, res: Response) => {
   try {
-    const result = await query(`
+    const result = await pool.query(`
       SELECT cs.id, cs.chapter_title, cs.stage, cs.review_status, cs.payment_status, cs.created_at, cv.title as volume_title
       FROM chapter_submissions cs
       JOIN chapter_volumes cv ON cs.volume_id = cv.id
@@ -232,7 +232,7 @@ export const updateChapterStage = async (req: Request, res: Response) => {
     if (updates.length === 0) return res.status(400).json({ error: "No fields to update" });
 
     values.push(id);
-    const result = await query(
+    const result = await pool.query(
       `UPDATE chapter_submissions SET ${updates.join(", ")} WHERE id = $${paramIndex} RETURNING *`,
       values
     );
@@ -241,7 +241,7 @@ export const updateChapterStage = async (req: Request, res: Response) => {
     
     // fetch primary author
     if (stage) {
-       const authRes = await query("SELECT email FROM chapter_authors WHERE submission_id = $1 AND is_primary = true", [id]);
+       const authRes = await pool.query("SELECT email FROM chapter_authors WHERE submission_id = $1 AND is_primary = true", [id]);
        if (authRes.rows.length > 0) {
          await sendNotificationEmail({
            to: authRes.rows[0].email,
