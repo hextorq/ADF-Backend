@@ -10,6 +10,7 @@ import { formsRouter } from "./modules/forms/forms.routes.js";
 import { uploadsRouter } from "./modules/uploads/uploads.routes.js";
 import submissionsRouter from "./modules/submissions/submissions.routes.js";
 import publicationsRouter from "./modules/publications/publications.routes.js";
+import { programmesRouter } from "./modules/programmes/programmes.routes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { requestTiming } from "./middleware/requestTiming.js";
 
@@ -41,5 +42,6 @@ app.use("/api/forms", formsRouter);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/literary-submissions", submissionsRouter);
 app.use("/api/publications", publicationsRouter);
+app.use("/api/programmes", programmesRouter);
 
 app.use(errorHandler);

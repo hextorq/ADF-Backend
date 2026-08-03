@@ -196,20 +196,21 @@ export const submitChapter = async (req: Request, res: Response) => {
 export const getChapterSubmissions = async (req: Request, res: Response) => {
   try {
     const result = await pool.query(`
-      SELECT cs.id, cs.chapter_title, cs.stage, cs.review_status, cs.payment_status, cs.created_at, cv.title as volume_title
+      SELECT cs.id, cs.chapter_title, cs.status as stage, cs.payment_status, cs.created_at, cv.title as volume_title
       FROM chapter_submissions cs
-      JOIN chapter_volumes cv ON cs.volume_id = cv.id
+      JOIN chapter_calls cv ON cs.call_id = cv.id
       ORDER BY cs.created_at DESC
     `);
     res.json(result.rows);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Failed to fetch submissions" });
   }
 };
 
 export const updateChapterStage = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { stage, review_status, editor_assigned } = req.body;
+  const { stage } = req.body;
   
   try {
     const updates = [];
@@ -217,16 +218,8 @@ export const updateChapterStage = async (req: Request, res: Response) => {
     let paramIndex = 1;
 
     if (stage) {
-      updates.push(`stage = $${paramIndex++}`);
+      updates.push(`status = $${paramIndex++}`);
       values.push(stage);
-    }
-    if (review_status !== undefined) {
-      updates.push(`review_status = $${paramIndex++}`);
-      values.push(review_status);
-    }
-    if (editor_assigned !== undefined) {
-      updates.push(`editor_assigned = $${paramIndex++}`);
-      values.push(editor_assigned);
     }
     
     if (updates.length === 0) return res.status(400).json({ error: "No fields to update" });
@@ -239,20 +232,20 @@ export const updateChapterStage = async (req: Request, res: Response) => {
 
     const updated = result.rows[0];
     
-    // fetch primary author
+    // fetch primary author (or just use author_email from the submission itself since we have it in chapter_submissions)
     if (stage) {
-       const authRes = await pool.query("SELECT email FROM chapter_authors WHERE submission_id = $1 AND is_primary = true", [id]);
-       if (authRes.rows.length > 0) {
+       if (updated && updated.author_email) {
          await sendNotificationEmail({
-           to: authRes.rows[0].email,
+           to: updated.author_email,
            subject: `Update on your Chapter Submission: ${updated.chapter_title}`,
            message: `Your chapter submission stage has been updated to: ${stage}.`
          });
        }
     }
 
-    res.json(updated);
+    res.json({ success: true, updated });
   } catch (err) {
-    res.status(500).json({ error: "Failed to update" });
+    console.error(err);
+    res.status(500).json({ error: "Failed to update submission" });
   }
 };
