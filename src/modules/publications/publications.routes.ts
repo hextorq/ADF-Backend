@@ -5,6 +5,7 @@ import {
   publishToBookStore,
   getChapterVolumes,
   createChapterVolume,
+  updateChapterVolume,
   submitChapter,
   getChapterSubmissions,
   updateChapterStage
@@ -20,7 +21,8 @@ router.post("/literary/admin/:id/publish", publishToBookStore);
 
 // --- CHAPTER PUBLICATIONS ---
 router.get("/chapters/volumes", getChapterVolumes);
-router.post("/chapters/volumes", createChapterVolume); // admin
+router.post("/chapters/volumes", upload.single("cover_image"), createChapterVolume); // admin
+router.patch("/chapters/volumes/:id", updateChapterVolume); // admin
 
 router.post(
   "/chapters/submit",

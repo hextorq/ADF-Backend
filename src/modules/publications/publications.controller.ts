@@ -131,15 +131,30 @@ export const getChapterVolumes = async (req: Request, res: Response) => {
 };
 
 export const createChapterVolume = async (req: Request, res: Response) => {
-  const { title, theme, description, submission_deadline } = req.body;
+  const { title, theme, description, submission_deadline, pages } = req.body;
+  const cover_url = req.file ? `/uploads/${req.file.filename}` : req.body.cover_url;
   try {
     const result = await pool.query(
-      "INSERT INTO chapter_volumes (title, theme, description, submission_deadline) VALUES ($1, $2, $3, $4) RETURNING *",
-      [title, theme, description, submission_deadline]
+      "INSERT INTO chapter_volumes (title, theme, description, submission_deadline, cover_url, pages) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+      [title, theme, description, submission_deadline, cover_url, pages]
     );
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: "Failed to create volume" });
+  }
+};
+
+export const updateChapterVolume = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { title, theme, description, submission_deadline, cover_url, pages, status } = req.body;
+  try {
+    const result = await pool.query(
+      "UPDATE chapter_volumes SET title=$1, theme=$2, description=$3, submission_deadline=$4, cover_url=$5, pages=$6, status=$7, updated_at=CURRENT_TIMESTAMP WHERE id=$8 RETURNING *",
+      [title, theme, description, submission_deadline, cover_url, pages, status, id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update volume" });
   }
 };
 
