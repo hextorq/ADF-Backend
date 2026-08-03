@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { getAllProgrammes, createProgramme, updateProgramme, deleteProgramme } from "./programmes.controller.js";
 import { requireAdmin } from "../../middleware/auth.js";
-import { asyncHandler } from "../../utils/asyncHandler.js";
+import { asyncHandler } from "../../middleware/asyncHandler.js";
 
 export const programmesRouter = Router();
 
