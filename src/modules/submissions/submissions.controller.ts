@@ -38,7 +38,7 @@ export const submissionController = {
         ...req.body,
         wordCount: Number(req.body.wordCount),
         pageCount: req.body.pageCount ? Number(req.body.pageCount) : undefined,
-        packageId: Number(req.body.packageId),
+        packageId: req.body.packageId ? Number(req.body.packageId) : undefined,
         agreedOriginal: req.body.agreedOriginal === 'true',
         agreedCopyright: req.body.agreedCopyright === 'true',
         agreedNotPublished: req.body.agreedNotPublished === 'true',

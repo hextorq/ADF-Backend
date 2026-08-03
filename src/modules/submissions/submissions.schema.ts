@@ -17,7 +17,7 @@ export const CreateSubmissionSchema = z.object({
   synopsis: z.string().min(1, "Synopsis is required"),
   keywords: z.string().optional(),
   
-  packageId: z.preprocess((val) => Number(val), z.number().positive("Package ID must be valid")),
+  packageId: z.preprocess((val) => val ? Number(val) : undefined, z.number().positive("Package ID must be valid").optional()),
   
   agreedOriginal: z.preprocess((val) => val === 'true' || val === true, z.boolean()),
   agreedCopyright: z.preprocess((val) => val === 'true' || val === true, z.boolean()),

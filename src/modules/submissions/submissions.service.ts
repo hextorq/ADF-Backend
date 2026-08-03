@@ -39,7 +39,7 @@ export const submissionService = {
     const values = [
       submissionId, data.authorName, data.authorEmail, data.authorPhone, data.authorCountry, data.authorAddress, data.authorBio || null, files.authorPhotoUrl || null,
       data.bookTitle, data.bookSubtitle || null, data.bookGenre, data.bookLanguage, data.wordCount, data.pageCount || null, data.synopsis, data.keywords || null,
-      files.manuscriptUrl, files.coverUrl || null, data.packageId,
+      files.manuscriptUrl, files.coverUrl || null, data.packageId || null,
       data.agreedOriginal, data.agreedCopyright, data.agreedNotPublished, data.agreedPolicies
     ];
 
