@@ -8,7 +8,10 @@ import {
   updateChapterVolume,
   submitChapter,
   getChapterSubmissions,
-  updateChapterStage
+  updateChapterStage,
+  deleteLiterarySubmission,
+  deleteChapterVolume,
+  deleteChapterSubmission
 } from "./publications.controller.js";
 import { upload } from "../submissions/submissions.controller.js"; // Reuse multer upload
 
@@ -18,11 +21,13 @@ const router = Router();
 router.get("/literary/admin", getLiterarySubmissions);
 router.patch("/literary/admin/:id/stage", updateLiteraryStage);
 router.post("/literary/admin/:id/publish", publishToBookStore);
+router.delete("/literary/admin/:id", deleteLiterarySubmission);
 
 // --- CHAPTER PUBLICATIONS ---
 router.get("/chapters/volumes", getChapterVolumes);
 router.post("/chapters/volumes", upload.single("cover_image"), createChapterVolume); // admin
 router.patch("/chapters/volumes/:id", updateChapterVolume); // admin
+router.delete("/chapters/volumes/:id", deleteChapterVolume); // admin
 
 router.post(
   "/chapters/submit",
@@ -32,5 +37,6 @@ router.post(
 
 router.get("/chapters/admin", getChapterSubmissions);
 router.patch("/chapters/admin/:id/stage", updateChapterStage);
+router.delete("/chapters/admin/:id", deleteChapterSubmission);
 
 export default router;

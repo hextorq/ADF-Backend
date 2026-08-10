@@ -118,6 +118,17 @@ export const publishToBookStore = async (req: Request, res: Response) => {
   }
 };
 
+export const deleteLiterarySubmission = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    await pool.query("DELETE FROM literary_submissions WHERE id = $1", [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to delete submission" });
+  }
+};
+
 
 // --- CHAPTER PUBLICATIONS ---
 
@@ -155,6 +166,17 @@ export const updateChapterVolume = async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: "Failed to update volume" });
+  }
+};
+
+export const deleteChapterVolume = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    await pool.query("DELETE FROM chapter_volumes WHERE id = $1", [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to delete volume" });
   }
 };
 
@@ -211,9 +233,9 @@ export const submitChapter = async (req: Request, res: Response) => {
 export const getChapterSubmissions = async (req: Request, res: Response) => {
   try {
     const result = await pool.query(`
-      SELECT cs.id, cs.chapter_title, cs.status as stage, cs.payment_status, cs.created_at, cv.title as volume_title
+      SELECT cs.id, cs.chapter_title, cs.stage, cs.payment_status, cs.created_at, cv.title as volume_title
       FROM chapter_submissions cs
-      JOIN chapter_calls cv ON cs.call_id = cv.id
+      JOIN chapter_volumes cv ON cs.volume_id = cv.id
       ORDER BY cs.created_at DESC
     `);
     res.json(result.rows);
@@ -262,5 +284,16 @@ export const updateChapterStage = async (req: Request, res: Response) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to update submission" });
+  }
+};
+
+export const deleteChapterSubmission = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    await pool.query("DELETE FROM chapter_submissions WHERE id = $1", [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to delete submission" });
   }
 };
