@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
   getLiterarySubmissions,
-  updateLiteraryStage,
+  updateLiterarySubmission,
   publishToBookStore,
   getChapterVolumes,
   createChapterVolume,
@@ -19,7 +19,7 @@ const router = Router();
 
 // --- LITERARY PUBLICATIONS (Admin extensions to existing flow) ---
 router.get("/literary/admin", getLiterarySubmissions);
-router.patch("/literary/admin/:id/stage", updateLiteraryStage);
+router.patch("/literary/admin/:id", updateLiterarySubmission);
 router.post("/literary/admin/:id/publish", publishToBookStore);
 router.delete("/literary/admin/:id", deleteLiterarySubmission);
 

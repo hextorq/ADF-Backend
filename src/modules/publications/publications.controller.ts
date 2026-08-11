@@ -7,7 +7,7 @@ import { sendNotificationEmail } from "../../lib/notifications.js";
 export const getLiterarySubmissions = async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      "SELECT id, book_title, author_name, book_genre, package_id, payment_status, current_stage, editor_assigned, isbn, created_at FROM literary_submissions ORDER BY created_at DESC"
+      "SELECT * FROM literary_submissions ORDER BY created_at DESC"
     );
     res.json(result.rows);
   } catch (err) {
@@ -16,26 +16,30 @@ export const getLiterarySubmissions = async (req: Request, res: Response) => {
   }
 };
 
-export const updateLiteraryStage = async (req: Request, res: Response) => {
+export const updateLiterarySubmission = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { stage, editor_assigned, isbn } = req.body;
+  const { 
+    current_stage, editor_assigned, isbn, 
+    author_name, author_email, author_phone, author_country, author_bio,
+    book_title, book_subtitle, book_genre, book_language, word_count, synopsis
+  } = req.body;
   
   try {
     const updates = [];
     const values = [];
     let paramIndex = 1;
 
-    if (stage) {
-      updates.push(`current_stage = $${paramIndex++}`);
-      values.push(stage);
-    }
-    if (editor_assigned !== undefined) {
-      updates.push(`editor_assigned = $${paramIndex++}`);
-      values.push(editor_assigned);
-    }
-    if (isbn !== undefined) {
-      updates.push(`isbn = $${paramIndex++}`);
-      values.push(isbn);
+    const fieldsToUpdate = {
+      current_stage, editor_assigned, isbn,
+      author_name, author_email, author_phone, author_country, author_bio,
+      book_title, book_subtitle, book_genre, book_language, word_count, synopsis
+    };
+
+    for (const [key, value] of Object.entries(fieldsToUpdate)) {
+      if (value !== undefined) {
+        updates.push(`${key} = $${paramIndex++}`);
+        values.push(value);
+      }
     }
     
     if (updates.length === 0) {
@@ -51,12 +55,12 @@ export const updateLiteraryStage = async (req: Request, res: Response) => {
     const updated = result.rows[0];
     if (!updated) return res.status(404).json({ error: "Not found" });
 
-    // Send notification
-    if (stage) {
+    // Send notification if stage was explicitly updated
+    if (current_stage) {
       await sendNotificationEmail({
         to: updated.author_email,
         subject: `Update on your Literary Submission: ${updated.book_title}`,
-        message: `Your manuscript is now in the following stage: ${stage}.`
+        message: `Your manuscript is now in the following stage: ${current_stage}.`
       });
     }
 
