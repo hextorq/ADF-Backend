@@ -31,7 +31,7 @@ router.delete("/chapters/volumes/:id", deleteChapterVolume); // admin
 
 router.post(
   "/chapters/submit",
-  upload.fields([{ name: "manuscript", maxCount: 1 }]),
+  upload.fields([{ name: "manuscript", maxCount: 1 }, { name: "payment_screenshot", maxCount: 1 }]),
   submitChapter
 );
 
