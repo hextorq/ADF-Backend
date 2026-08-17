@@ -164,7 +164,16 @@ export const updateChapterVolume = async (req: Request, res: Response) => {
   const { title, theme, description, submission_deadline, cover_url, pages, status } = req.body;
   try {
     const result = await pool.query(
-      "UPDATE chapter_volumes SET title=$1, theme=$2, description=$3, submission_deadline=$4, cover_url=$5, pages=$6, status=$7, updated_at=CURRENT_TIMESTAMP WHERE id=$8 RETURNING *",
+      `UPDATE chapter_volumes SET 
+        title=COALESCE($1, title), 
+        theme=COALESCE($2, theme), 
+        description=COALESCE($3, description), 
+        submission_deadline=COALESCE($4, submission_deadline), 
+        cover_url=COALESCE($5, cover_url), 
+        pages=COALESCE($6, pages), 
+        status=COALESCE($7, status), 
+        updated_at=CURRENT_TIMESTAMP 
+       WHERE id=$8 RETURNING *`,
       [title, theme, description, submission_deadline, cover_url, pages, status, id]
     );
     res.json(result.rows[0]);
@@ -201,28 +210,31 @@ export const submitChapter = async (req: Request, res: Response) => {
   try {
     await pool.query("BEGIN");
     
-    const primaryAuth = Array.isArray(authors) ? authors.find((a: any) => a.is_primary) || authors[0] : (typeof authors === 'string' ? JSON.parse(authors).find((a: any) => a.is_primary) || JSON.parse(authors)[0] : { name: 'Unknown', email: '', institution: '' });
-    
-    // Insert Submission into the live schema
+    // Insert Submission
     await pool.query(
-      `INSERT INTO chapter_submissions (
-        id, call_id, author_name, author_email, author_institution, author_department, 
-        author_designation, author_country, chapter_title, keywords, abstract, 
-        research_area, language, word_count, manuscript_url, transaction_id, payment_screenshot_url
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
-      [
-        submissionId, volume_id, primaryAuth.name, primaryAuth.email, primaryAuth.institution, 
-        'N/A', 'N/A', 'N/A', chapter_title, keywords, abstract, 
-        'General', 'English', 0, manuscriptUrl, transaction_id, paymentScreenshotUrl
-      ]
+      `INSERT INTO chapter_submissions (id, volume_id, chapter_title, abstract, keywords, manuscript_url, transaction_id, payment_screenshot_url) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [submissionId, volume_id, chapter_title, abstract, keywords, manuscriptUrl, transaction_id, paymentScreenshotUrl]
     );
 
-    // Skip inserting into chapter_authors since the schema doesn't use it.
+    // Insert Authors
+    let primaryEmail = "";
+    if (typeof authors === 'string') {
+      const parsed = JSON.parse(authors);
+      for (const auth of parsed) {
+        if (auth.is_primary) primaryEmail = auth.email;
+        await pool.query(
+          `INSERT INTO chapter_authors (submission_id, is_primary, name, email, institution) VALUES ($1, $2, $3, $4, $5)`,
+          [submissionId, auth.is_primary, auth.name, auth.email, auth.institution]
+        );
+      }
+    }
+
     await pool.query("COMMIT");
 
-    if (primaryAuth.email) {
+    if (primaryEmail) {
       await sendNotificationEmail({
-        to: primaryAuth.email,
+        to: primaryEmail,
         subject: `Chapter Submission Received: ${chapter_title}`,
         message: `Your chapter has been received. Your tracking ID is ${submissionId}.`
       });
@@ -239,9 +251,9 @@ export const submitChapter = async (req: Request, res: Response) => {
 export const getChapterSubmissions = async (req: Request, res: Response) => {
   try {
     const result = await pool.query(`
-      SELECT cs.id, cs.chapter_title, cs.status as stage, cs.payment_status, cs.created_at, cv.title as volume_title
+      SELECT cs.id, cs.chapter_title, cs.stage, cs.payment_status, cs.created_at, cv.title as volume_title
       FROM chapter_submissions cs
-      JOIN chapter_volumes cv ON cs.call_id = cv.id::text
+      JOIN chapter_volumes cv ON cs.volume_id = cv.id
       ORDER BY cs.created_at DESC
     `);
     res.json(result.rows);
