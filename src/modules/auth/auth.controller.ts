@@ -45,3 +45,16 @@ export function me(req: Request, res: Response) {
   const isAdmin = readAdminStatus(req);
   res.json({ isAdmin, email: isAdmin ? env.ADMIN_EMAIL : null });
 }
+
+export function ssoLogin(req: Request, res: Response) {
+  // Mock an SSO successful login by directly logging in the admin
+  const token = signAdminToken();
+  res.cookie(env.COOKIE_NAME, token, {
+    ...cookieOptions,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+  
+  // Parse the frontend origin to redirect back to the admin panel
+  const origin = env.FRONTEND_ORIGIN.split(",")[0].trim();
+  res.redirect(`${origin}/admin`);
+}
