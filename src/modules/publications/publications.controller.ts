@@ -280,7 +280,7 @@ export const getChapterSubmissions = async (req: Request, res: Response) => {
 
 export const updateChapterStage = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { stage } = req.body;
+  const { stage, payment_status } = req.body;
   
   try {
     const updates = [];
@@ -288,8 +288,12 @@ export const updateChapterStage = async (req: Request, res: Response) => {
     let paramIndex = 1;
 
     if (stage) {
-      updates.push(`status = $${paramIndex++}`);
+      updates.push(`stage = $${paramIndex++}`);
       values.push(stage);
+    }
+    if (payment_status) {
+      updates.push(`payment_status = $${paramIndex++}`);
+      values.push(payment_status);
     }
     
     if (updates.length === 0) return res.status(400).json({ error: "No fields to update" });
