@@ -43,6 +43,8 @@ export const updateLiterarySubmission = async (req: Request, res: Response) => {
       }
     }
     
+    updates.push(`updated_at = NOW()`);
+    
     if (updates.length === 0) {
       return res.status(400).json({ error: "No fields to update" });
     }
@@ -315,6 +317,8 @@ export const updateChapterStage = async (req: Request, res: Response) => {
       updates.push(`payment_status = $${paramIndex++}`);
       values.push(payment_status);
     }
+    
+    updates.push(`updated_at = NOW()`);
     
     if (updates.length === 0) return res.status(400).json({ error: "No fields to update" });
 
