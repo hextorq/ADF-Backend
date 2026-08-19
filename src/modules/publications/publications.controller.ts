@@ -242,8 +242,8 @@ export const submitChapter = async (req: Request, res: Response) => {
       for (const auth of parsed) {
         if (auth.is_primary) primaryEmail = auth.email;
         await pool.query(
-          `INSERT INTO chapter_authors (submission_id, is_primary, name, email, institution) VALUES ($1, $2, $3, $4, $5)`,
-          [submissionId, auth.is_primary, auth.name, auth.email, auth.institution]
+          `INSERT INTO chapter_authors (submission_id, is_primary, name, email, phone, country, institution, address, author_bio) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [submissionId, auth.is_primary, auth.name, auth.email, auth.phone, auth.country, auth.institution, auth.address, auth.bio]
         );
       }
     }
@@ -280,7 +280,9 @@ export const getChapterSubmissions = async (req: Request, res: Response) => {
             'email', a.email,
             'phone', a.phone,
             'institution', a.institution,
-            'country', a.country
+            'country', a.country,
+            'address', a.address,
+            'author_bio', a.author_bio
           )) 
           FROM chapter_authors a 
           WHERE a.submission_id = cs.id
