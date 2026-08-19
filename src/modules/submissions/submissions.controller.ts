@@ -4,10 +4,16 @@ import path from "path";
 import { CreateSubmissionSchema, UpdateSubmissionStatusSchema } from "./submissions.schema.js";
 import { submissionService } from "./submissions.service.js";
 
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadsDir = path.resolve(__dirname, "../../../uploads");
+
 // Setup Multer for local uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/");
+    cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
