@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { pool } from "../../db/pool.js";
+import { saveFileToDB } from "../../db/fileStorage.js";
 import { sendNotificationEmail } from "../../lib/notifications.js";
 
 // --- LITERARY PUBLICATIONS ADMIN ---
@@ -153,8 +154,8 @@ export const createChapterVolume = async (req: Request, res: Response) => {
   const coverFile = files?.['cover_image']?.[0];
   const pdfFileObj = files?.['pdf_file']?.[0];
   
-  const cover_url = coverFile ? `/uploads/${coverFile.filename}` : req.body.cover_url;
-  const pdf_url = pdfFileObj ? `/uploads/${pdfFileObj.filename}` : req.body.pdf_url;
+  const cover_url = coverFile ? await saveFileToDB(coverFile) : req.body.cover_url;
+  const pdf_url = pdfFileObj ? await saveFileToDB(pdfFileObj) : req.body.pdf_url;
   
   try {
     const result = await pool.query(
@@ -175,8 +176,8 @@ export const updateChapterVolume = async (req: Request, res: Response) => {
   const coverFile = files?.['cover_image']?.[0];
   const pdfFileObj = files?.['pdf_file']?.[0];
   
-  const cover_url = coverFile ? `/uploads/${coverFile.filename}` : req.body.cover_url;
-  const pdf_url = pdfFileObj ? `/uploads/${pdfFileObj.filename}` : req.body.pdf_url;
+  const cover_url = coverFile ? await saveFileToDB(coverFile) : req.body.cover_url;
+  const pdf_url = pdfFileObj ? await saveFileToDB(pdfFileObj) : req.body.pdf_url;
   
   try {
     const result = await pool.query(
@@ -219,8 +220,8 @@ export const submitChapter = async (req: Request, res: Response) => {
   if (!manuscript) return res.status(400).json({ error: "Manuscript is required" });
   if (!transaction_id) return res.status(400).json({ error: "Transaction ID is required" });
   
-  const manuscriptUrl = `/uploads/${manuscript.filename}`;
-  const paymentScreenshotUrl = paymentScreenshot ? `/uploads/${paymentScreenshot.filename}` : null;
+  const manuscriptUrl = await saveFileToDB(manuscript);
+  const paymentScreenshotUrl = paymentScreenshot ? await saveFileToDB(paymentScreenshot) : null;
   
   const submissionId = `CHAP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
 

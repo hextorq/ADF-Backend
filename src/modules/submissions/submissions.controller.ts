@@ -3,23 +3,10 @@ import multer from "multer";
 import path from "path";
 import { CreateSubmissionSchema, UpdateSubmissionStatusSchema } from "./submissions.schema.js";
 import { submissionService } from "./submissions.service.js";
+import { saveFileToDB } from "../../db/fileStorage.js";
 
-import { fileURLToPath } from "node:url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const uploadsDir = path.resolve(__dirname, "../../../uploads");
-
-// Setup Multer for local uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname));
-  },
-});
+// Setup Multer for memory uploads
+const storage = multer.memoryStorage();
 
 export const upload = multer({
   storage,
@@ -59,10 +46,14 @@ export const submissionController = {
         return res.status(400).json({ error: "Manuscript file is required" });
       }
 
+      const manuscriptUrl = await saveFileToDB(files.manuscript[0]);
+      const coverUrl = files.coverImage ? await saveFileToDB(files.coverImage[0]) : undefined;
+      const authorPhotoUrl = files.authorPhoto ? await saveFileToDB(files.authorPhoto[0]) : undefined;
+
       const fileUrls = {
-        manuscriptUrl: `/uploads/${files.manuscript[0].filename}`,
-        coverUrl: files.coverImage ? `/uploads/${files.coverImage[0].filename}` : undefined,
-        authorPhotoUrl: files.authorPhoto ? `/uploads/${files.authorPhoto[0].filename}` : undefined,
+        manuscriptUrl,
+        coverUrl,
+        authorPhotoUrl,
       };
 
       const submission = await submissionService.createSubmission(validatedData, fileUrls);
