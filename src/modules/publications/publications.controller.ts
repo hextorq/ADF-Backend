@@ -147,11 +147,19 @@ export const getChapterVolumes = async (req: Request, res: Response) => {
 
 export const createChapterVolume = async (req: Request, res: Response) => {
   const { title, theme, description, submission_deadline, pages } = req.body;
-  const cover_url = req.file ? `/uploads/${req.file.filename}` : req.body.cover_url;
+  
+  const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+  
+  const coverFile = files?.['cover_image']?.[0];
+  const pdfFileObj = files?.['pdf_file']?.[0];
+  
+  const cover_url = coverFile ? `/uploads/${coverFile.filename}` : req.body.cover_url;
+  const pdf_url = pdfFileObj ? `/uploads/${pdfFileObj.filename}` : req.body.pdf_url;
+  
   try {
     const result = await pool.query(
-      "INSERT INTO chapter_volumes (title, theme, description, submission_deadline, cover_url, pages) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
-      [title, theme, description, submission_deadline, cover_url, pages]
+      "INSERT INTO chapter_volumes (title, theme, description, submission_deadline, cover_url, pages, pdf_url) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+      [title, theme, description, submission_deadline, cover_url, pages, pdf_url]
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -161,7 +169,15 @@ export const createChapterVolume = async (req: Request, res: Response) => {
 
 export const updateChapterVolume = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { title, theme, description, submission_deadline, cover_url, pages, status } = req.body;
+  const { title, theme, description, submission_deadline, pages, status } = req.body;
+  
+  const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+  const coverFile = files?.['cover_image']?.[0];
+  const pdfFileObj = files?.['pdf_file']?.[0];
+  
+  const cover_url = coverFile ? `/uploads/${coverFile.filename}` : req.body.cover_url;
+  const pdf_url = pdfFileObj ? `/uploads/${pdfFileObj.filename}` : req.body.pdf_url;
+  
   try {
     const result = await pool.query(
       `UPDATE chapter_volumes SET 
@@ -172,9 +188,10 @@ export const updateChapterVolume = async (req: Request, res: Response) => {
         cover_url=COALESCE($5, cover_url), 
         pages=COALESCE($6, pages), 
         status=COALESCE($7, status), 
+        pdf_url=COALESCE($8, pdf_url),
         updated_at=CURRENT_TIMESTAMP 
-       WHERE id=$8 RETURNING *`,
-      [title, theme, description, submission_deadline, cover_url, pages, status, id]
+       WHERE id=$9 RETURNING *`,
+      [title, theme, description, submission_deadline, cover_url, pages, status, pdf_url, id]
     );
     res.json(result.rows[0]);
   } catch (err) {

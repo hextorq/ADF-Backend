@@ -25,8 +25,16 @@ router.delete("/literary/admin/:id", deleteLiterarySubmission);
 
 // --- CHAPTER PUBLICATIONS ---
 router.get("/chapters/volumes", getChapterVolumes);
-router.post("/chapters/volumes", upload.single("cover_image"), createChapterVolume); // admin
-router.patch("/chapters/volumes/:id", updateChapterVolume); // admin
+router.post(
+  "/chapters/volumes", 
+  upload.fields([{ name: "cover_image", maxCount: 1 }, { name: "pdf_file", maxCount: 1 }]), 
+  createChapterVolume
+); // admin
+router.patch(
+  "/chapters/volumes/:id", 
+  upload.fields([{ name: "cover_image", maxCount: 1 }, { name: "pdf_file", maxCount: 1 }]), 
+  updateChapterVolume
+); // admin
 router.delete("/chapters/volumes/:id", deleteChapterVolume); // admin
 
 router.post(
