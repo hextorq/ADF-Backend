@@ -251,7 +251,22 @@ export const submitChapter = async (req: Request, res: Response) => {
 export const getChapterSubmissions = async (req: Request, res: Response) => {
   try {
     const result = await pool.query(`
-      SELECT cs.id, cs.chapter_title, cs.stage, cs.payment_status, cs.created_at, cv.title as volume_title
+      SELECT 
+        cs.*, 
+        cv.title as volume_title,
+        (
+          SELECT json_agg(json_build_object(
+            'id', a.id,
+            'is_primary', a.is_primary,
+            'name', a.name,
+            'email', a.email,
+            'phone', a.phone,
+            'institution', a.institution,
+            'country', a.country
+          )) 
+          FROM chapter_authors a 
+          WHERE a.submission_id = cs.id
+        ) as authors
       FROM chapter_submissions cs
       JOIN chapter_volumes cv ON cs.volume_id = cv.id
       ORDER BY cs.created_at DESC
