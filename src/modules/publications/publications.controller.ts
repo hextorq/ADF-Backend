@@ -214,8 +214,18 @@ export const deleteChapterVolume = async (req: Request, res: Response) => {
 };
 
 export const submitChapter = async (req: Request, res: Response) => {
-  // Simplified for now - assumes authors are passed as JSON array
-    const { volume_id, chapter_title, abstract, keywords, authors, transaction_id } = req.body;
+  const {
+    volume_id,
+    chapter_title,
+    abstract,
+    keywords,
+    authors,
+    transaction_id,
+    formatted_manuscript_url,
+    formatting_version,
+    formatting_issues,
+    author_confirmed_formatting,
+  } = req.body;
   const manuscript = (req.files as any)?.manuscript?.[0];
   const paymentScreenshot = (req.files as any)?.payment_screenshot?.[0];
   
@@ -232,9 +242,25 @@ export const submitChapter = async (req: Request, res: Response) => {
     
     // Insert Submission
     await pool.query(
-      `INSERT INTO chapter_submissions (id, volume_id, chapter_title, abstract, keywords, manuscript_url, transaction_id, payment_screenshot_url) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [submissionId, volume_id, chapter_title, abstract, keywords, manuscriptUrl, transaction_id, paymentScreenshotUrl]
+      `INSERT INTO chapter_submissions (
+        id, volume_id, chapter_title, abstract, keywords, manuscript_url, transaction_id, payment_screenshot_url,
+        formatted_manuscript_url, formatting_version, formatting_status, formatting_issues, author_confirmed_formatting
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        submissionId,
+        volume_id,
+        chapter_title,
+        abstract,
+        keywords,
+        manuscriptUrl,
+        transaction_id,
+        paymentScreenshotUrl,
+        formatted_manuscript_url || null,
+        formatting_version || (formatted_manuscript_url ? "ADF Format v1.0" : null),
+        formatted_manuscript_url ? "Completed" : "Pending",
+        formatting_issues ? (typeof formatting_issues === "string" ? formatting_issues : JSON.stringify(formatting_issues)) : "[]",
+        author_confirmed_formatting === true || author_confirmed_formatting === "true",
+      ]
     );
 
     // Insert Authors
@@ -358,3 +384,4 @@ export const deleteChapterSubmission = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to delete submission" });
   }
 };
+
