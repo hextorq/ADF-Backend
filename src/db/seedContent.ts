@@ -722,6 +722,8 @@ seed(
   "admin.dashboard.behavior.description",
   "Text edits, image URL edits, and uploaded images are saved through the backend CMS API into PostgreSQL. Visitors see the saved content automatically."
 );
+seed("page.contact.email.label", "academicdevelopmentforum24@gmail.com");
+
 
 const resetExistingContent = process.argv.includes("--reset") || process.env.SEED_CONTENT_RESET === "true";
 

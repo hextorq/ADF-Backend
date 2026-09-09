@@ -365,9 +365,9 @@ export async function parseAndDetectStructure(
   const emailRegex = /[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}/g;
   const emailAddresses = Array.from(new Set(rawText.match(emailRegex) || []));
 
-  // 1. Detect Title (clean leading "Title:" or "Manuscript Title:")
+  // 1. Detect Title (clean leading "Title:" or "Manuscript Title:" if followed by punctuation)
   let title = rawLines.length > 0 ? rawLines[0] : "Untitled Manuscript";
-  title = title.replace(/^(paper\s+title|title|manuscript\s+title)[:\s-]*/i, "").trim();
+  title = title.replace(/^(paper\s+title|title|manuscript\s+title)\s*[:\-]\s*/i, "").trim();
 
   // 2. Detect Authors & Affiliations
   const authors: string[] = [];
