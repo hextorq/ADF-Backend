@@ -1,5 +1,6 @@
-﻿import { Request, Response } from "express";
+import { Request, Response } from "express";
 import path from "path";
+import fs from "fs";
 import crypto from "crypto";
 import { pool } from "../../db/pool.js";
 import { saveFileToDB, saveBufferToDB } from "../../db/fileStorage.js";
@@ -23,6 +24,8 @@ export const formatterController = {
         });
       }
 
+      const publicationType = (req.body.publicationType || "Book Chapters").trim();
+
       // 1. Fetch active formatting configuration from database
       let activeConfig: FormattingConfig = DEFAULT_CONFIG;
       try {
@@ -44,7 +47,7 @@ export const formatterController = {
       }
 
       // 2. Execute document parser and formatting engine
-      const result = await processManuscript(req.file.buffer, originalFilename, activeConfig);
+      const result = await processManuscript(req.file.buffer, originalFilename, activeConfig, publicationType);
 
       // 3. Save original file to database storage
       const originalFileUrl = await saveFileToDB(req.file);
@@ -65,8 +68,9 @@ export const formatterController = {
         await pool.query(
           `INSERT INTO manuscript_formatting_sessions (
             id, original_filename, original_file_url, formatted_file_url, formatting_version,
-            detected_structure, formatting_changes, formatting_issues, stats
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            detected_structure, formatting_changes, formatting_issues, stats,
+            validation_report, publication_type
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
           [
             sessionId,
             originalFilename,
@@ -77,6 +81,8 @@ export const formatterController = {
             JSON.stringify(result.formattingChanges),
             JSON.stringify(result.issues),
             JSON.stringify(result.stats),
+            JSON.stringify(result.validationReport),
+            publicationType,
           ]
         );
       } catch (sessionErr) {
@@ -96,8 +102,10 @@ export const formatterController = {
         formattingChanges: result.formattingChanges,
         contentChanges: 0,
         issues: result.issues,
+        validationReport: result.validationReport,
         originalHtml: result.originalHtml,
         formattedHtml: result.formattedHtml,
+        publicationType,
       });
     } catch (error: any) {
       console.error("Error in formatterController.process:", error);
@@ -193,23 +201,49 @@ export const formatterController = {
    */
   async getSubmissions(req: Request, res: Response) {
     try {
-      // Gather submissions with formatting info from chapters and sessions
+      // Gather submissions with formatting info from chapters, literary, and direct sessions
       const chapterQuery = `
         SELECT 
-          cs.id as submission_id,
+          cs.id::text as submission_id,
           cs.chapter_title as title,
           ca.name as author_name,
-          'Chapter' as submission_type,
+          'Book Chapter' as submission_type,
+          'Book Chapters' as publication_type,
           cs.manuscript_url as original_url,
           cs.formatted_manuscript_url as formatted_url,
-          COALESCE(cs.formatting_version, 'ADF Format v1.0') as formatting_version,
+          COALESCE(cs.formatting_version, 'ADF Master Template v1.0') as formatting_version,
           COALESCE(cs.formatting_status, 'Completed') as formatting_status,
+          COALESCE(cs.stage, 'Submitted') as submission_status,
           COALESCE(cs.author_confirmed_formatting, true) as author_confirmed,
           COALESCE(cs.formatting_issues, '[]'::jsonb) as issues,
+          COALESCE(cs.validation_report, '{}'::jsonb) as validation_report,
+          COALESCE(cs.admin_notes, '') as admin_notes,
           cs.created_at
         FROM chapter_submissions cs
         LEFT JOIN chapter_authors ca ON cs.id = ca.submission_id AND ca.is_primary = true
         ORDER BY cs.created_at DESC
+        LIMIT 50;
+      `;
+
+      const literaryQuery = `
+        SELECT 
+          ls.id::text as submission_id,
+          ls.book_title as title,
+          ls.author_name as author_name,
+          'Literary Work' as submission_type,
+          'Literary Publications' as publication_type,
+          ls.manuscript_url as original_url,
+          ls.formatted_manuscript_url as formatted_url,
+          COALESCE(ls.formatting_version, 'ADF Master Template v1.0') as formatting_version,
+          COALESCE(ls.formatting_status, 'Completed') as formatting_status,
+          COALESCE(ls.stage, 'Submitted') as submission_status,
+          COALESCE(ls.author_confirmed_formatting, true) as author_confirmed,
+          COALESCE(ls.formatting_issues, '[]'::jsonb) as issues,
+          COALESCE(ls.validation_report, '{}'::jsonb) as validation_report,
+          COALESCE(ls.admin_notes, '') as admin_notes,
+          ls.created_at
+        FROM literary_submissions ls
+        ORDER BY ls.created_at DESC
         LIMIT 50;
       `;
 
@@ -219,24 +253,29 @@ export const formatterController = {
           original_filename as title,
           'Author' as author_name,
           'Direct Formatting' as submission_type,
+          COALESCE(publication_type, 'Book Chapters') as publication_type,
           original_file_url as original_url,
           formatted_file_url as formatted_url,
           formatting_version,
           status as formatting_status,
+          status as submission_status,
           author_confirmed,
           formatting_issues as issues,
+          COALESCE(validation_report, '{}'::jsonb) as validation_report,
+          COALESCE(admin_notes, '') as admin_notes,
           created_at
         FROM manuscript_formatting_sessions
         ORDER BY created_at DESC
         LIMIT 50;
       `;
 
-      const [chapterRes, sessionRes] = await Promise.all([
+      const [chapterRes, literaryRes, sessionRes] = await Promise.all([
         pool.query(chapterQuery),
+        pool.query(literaryQuery),
         pool.query(sessionQuery),
       ]);
 
-      const combined = [...chapterRes.rows, ...sessionRes.rows].sort(
+      const combined = [...chapterRes.rows, ...literaryRes.rows, ...sessionRes.rows].sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
 
@@ -244,6 +283,100 @@ export const formatterController = {
     } catch (error) {
       console.error("Error in formatterController.getSubmissions:", error);
       return res.status(500).json({ error: "Failed to fetch formatted submissions audit" });
+    }
+  },
+
+  /**
+   * Uploads and registers a new official ADF Master Template DOCX file.
+   */
+  async uploadTemplate(req: Request, res: Response) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No template DOCX file uploaded" });
+      }
+
+      const version = (req.body.version || `ADF Format v${Date.now()}`).trim();
+      const name = (req.body.name || `ADF Template (${version})`).trim();
+      const isActive = req.body.isActive === "true" || req.body.isActive === true;
+
+      const templatesDir = path.join(process.cwd(), "templates");
+      if (!fs.existsSync(templatesDir)) {
+        fs.mkdirSync(templatesDir, { recursive: true });
+      }
+
+      const safeVer = version.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const targetFilename = `ADF_Template_${safeVer}.docx`;
+      const targetPath = path.join(templatesDir, targetFilename);
+      fs.writeFileSync(targetPath, req.file.buffer);
+
+      if (isActive) {
+        await pool.query("UPDATE formatting_configurations SET is_active = false");
+      }
+
+      const upsertQuery = `
+        INSERT INTO formatting_configurations (
+          version, name, is_active, updated_at
+        ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+        ON CONFLICT (version) DO UPDATE SET
+          name = EXCLUDED.name,
+          is_active = EXCLUDED.is_active,
+          updated_at = CURRENT_TIMESTAMP
+        RETURNING *;
+      `;
+      const result = await pool.query(upsertQuery, [version, name, isActive]);
+
+      return res.json({ success: true, configuration: result.rows[0], filename: targetFilename });
+    } catch (err: any) {
+      console.error("Error in uploadTemplate:", err);
+      return res.status(500).json({ error: "Failed to upload template: " + err.message });
+    }
+  },
+
+  /**
+   * Updates submission status and records admin review notes.
+   */
+  async updateSubmissionStatus(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { status, adminNotes } = req.body;
+
+      if (!status) {
+        return res.status(400).json({ error: "Status is required" });
+      }
+
+      // Update in chapter_submissions
+      await pool.query(
+        `UPDATE chapter_submissions SET 
+          stage = $1,
+          formatting_status = $1, 
+          admin_notes = COALESCE($2, admin_notes)
+         WHERE id::text = $3`,
+        [status, adminNotes || "", id]
+      );
+
+      // Update in literary_submissions
+      await pool.query(
+        `UPDATE literary_submissions SET 
+          stage = $1,
+          formatting_status = $1, 
+          admin_notes = COALESCE($2, admin_notes)
+         WHERE id::text = $3`,
+        [status, adminNotes || "", id]
+      );
+
+      // Update in manuscript_formatting_sessions
+      await pool.query(
+        `UPDATE manuscript_formatting_sessions SET 
+          status = $1, 
+          admin_notes = COALESCE($2, admin_notes)
+         WHERE id = $3`,
+        [status, adminNotes || "", id]
+      );
+
+      return res.json({ success: true, id, status, adminNotes });
+    } catch (err: any) {
+      console.error("Error in updateSubmissionStatus:", err);
+      return res.status(500).json({ error: "Failed to update submission status: " + err.message });
     }
   },
 };

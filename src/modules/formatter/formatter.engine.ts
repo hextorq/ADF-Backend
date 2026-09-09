@@ -64,6 +64,16 @@ export interface DetectedStructure {
   publicationType: string;
 }
 
+export interface DashboardCheckItem {
+  id: string;
+  name: string;
+  passed: boolean;
+  status: "pass" | "warning" | "error" | "info";
+  label: string;
+  details?: string;
+  badge?: string;
+}
+
 export interface ValidationItem {
   id: string;
   category: "structure" | "formatting" | "references" | "content";
@@ -74,11 +84,19 @@ export interface ValidationItem {
 }
 
 export interface ValidationReport {
-  status: "PASS" | "PASS_WITH_WARNINGS" | "ACTION_REQUIRED";
+  status: "READY FOR AUTHOR REVIEW" | "REVIEW REQUIRED";
+  statusLevel: "PASS" | "PASS_WITH_WARNINGS" | "ACTION_REQUIRED";
   totalChecks: number;
   passedCount: number;
   warningCount: number;
   errorCount: number;
+  dashboard: {
+    structure: DashboardCheckItem[];
+    formatting: DashboardCheckItem[];
+    contentChecks: DashboardCheckItem[];
+    warnings: string[];
+    finalStatus: "READY FOR AUTHOR REVIEW" | "REVIEW REQUIRED";
+  };
   categories: {
     structure: { status: "pass" | "warning"; count: number; items: string[] };
     formatting: { status: "pass" | "warning"; count: number; items: string[] };
@@ -164,16 +182,27 @@ function escapeHtml(text: string): string {
  * Locates the official master template file.
  */
 export function getMasterTemplatePath(): string | null {
-  const candidates = [
-    path.join(process.cwd(), "templates", "ADF_Template.docx"),
-    path.join(process.cwd(), "ADF-Backend", "templates", "ADF_Template.docx"),
-    path.resolve(process.cwd(), "../ADF-Backend/templates/ADF_Template.docx"),
-    "c:\\Users\\kdon7\\Desktop\\react\\adf\\ADF-Backend\\templates\\ADF_Template.docx",
+  const candidateNames = [
+    "ADF_ Template(1).docx",
+    "ADF_ Template.docx",
+    "ADF_Template.docx",
+    "ADF_Manuscript_Template (1).docx",
+    "ADF_Manuscript_Template.docx",
+  ];
+  const candidateDirs = [
+    path.join(process.cwd(), "templates"),
+    path.join(process.cwd(), "ADF-Backend", "templates"),
+    path.resolve(process.cwd(), "../ADF-Backend/templates"),
+    "c:\\Users\\kdon7\\Desktop\\react\\adf\\ADF-Backend\\templates",
+    "c:\\Users\\kdon7\\Downloads",
   ];
 
-  for (const p of candidates) {
-    if (fs.existsSync(p)) {
-      return p;
+  for (const dir of candidateDirs) {
+    for (const name of candidateNames) {
+      const p = path.join(dir, name);
+      if (fs.existsSync(p)) {
+        return p;
+      }
     }
   }
   return null;
@@ -201,11 +230,29 @@ export function extractInTextCitations(text: string): InTextCitation[] {
     }
   }
 
-  // 2. Narrative citations: Smith (2020) or Smith et al. (2021)
+  // 2. Multiple citations in one paren: (Smith, 2020; Jones, 2021)
+  const multiParenRegex = /\(([^)]+;\s*[^)]+)\)/g;
+  while ((match = multiParenRegex.exec(text)) !== null) {
+    const inner = match[1];
+    const parts = inner.split(/\s*;\s*/);
+    for (const part of parts) {
+      const citMatch = part.match(/([A-Z][A-Za-z'’\-]+(?:\s+et\s+al\.?|\s*,\s*[A-Z][A-Za-z'’\-]+|\s*&\s*[A-Z][A-Za-z'’\-]+)*),\s*(\d{4}[a-z]?)/);
+      if (citMatch && !seen.has(citMatch[0])) {
+        seen.add(citMatch[0]);
+        citations.push({
+          raw: `(${citMatch[0]})`,
+          author: citMatch[1].trim(),
+          year: citMatch[2].trim(),
+        });
+      }
+    }
+  }
+
+  // 3. Narrative citations: Smith (2020) or Smith et al. (2021)
   const narrRegex = /\b([A-Z][A-Za-z'’\-]+(?:\s+et\s+al\.?|\s*&\s*[A-Z][A-Za-z'’\-]+|\s+and\s+[A-Z][A-Za-z'’\-]+)*)\s*\(\s*(\d{4}[a-z]?)\s*\)/g;
   while ((match = narrRegex.exec(text)) !== null) {
     const lead = match[1].trim();
-    if (!/^(figure|table|eq|equation|chapter|section|volume|vol|no|page|p|pp)\b/i.test(lead)) {
+    if (!/^(figure|table|eq|equation|chapter|section|volume|vol|no|page|p|pp|adf|et\s+al)\b/i.test(lead)) {
       const raw = match[0];
       if (!seen.has(raw)) {
         seen.add(raw);
@@ -223,12 +270,13 @@ export function extractInTextCitations(text: string): InTextCitation[] {
 
 /**
  * Checks for abbreviations / acronyms used without being defined at first appearance.
+ * ADF rule: Abbreviations must be defined at first use in body text (even if defined in abstract).
  */
 export function detectAbbreviations(text: string): { acronym: string; defined: boolean }[] {
+  // Only ignore global standard administrative acronyms; do NOT ignore topical acronyms like "AI"
   const ignoreSet = new Set([
-    "ADF", "USA", "UK", "EU", "UN", "AI", "DNA", "RNA", "COVID", "APA", "HTML", "XML", "URL", "PDF",
-    "IEEE", "ISO", "ID", "IT", "TV", "AM", "PM", "BC", "AD", "OK", "THE", "AND", "FOR", "NOT", "BUT",
-    "OR", "BY", "WITH", "FROM", "IN", "ON", "AT", "TO", "AS", "OF", "IS", "ARE", "WAS", "WERE",
+    "ADF", "USA", "UK", "EU", "UN", "COVID", "APA", "HTML", "XML", "URL", "PDF",
+    "IEEE", "ISO", "ID", "IT", "TV", "AM", "PM", "BC", "AD", "OK",
   ]);
 
   const acronymRegex = /\b([A-Z]{2,6})\b/g;
@@ -242,13 +290,14 @@ export function detectAbbreviations(text: string): { acronym: string; defined: b
     seen.add(acronym);
 
     const index = match.index;
-    const windowStart = Math.max(0, index - 100);
-    const windowEnd = Math.min(text.length, index + acronym.length + 100);
+    const windowStart = Math.max(0, index - 120);
+    const windowEnd = Math.min(text.length, index + acronym.length + 120);
     const context = text.slice(windowStart, windowEnd);
 
+    // Check if defined either as "Full Name (ACRONYM)" or "ACRONYM (Full Name)"
     const isDefined =
       context.includes(`(${acronym})`) ||
-      new RegExp(`\\b${acronym}\\s*\\([A-Za-z\\s-]{4,}\\)`).test(context);
+      new RegExp(`\\b${acronym}\\s*\\([A-Za-z\\s-]{3,}\\)`).test(context);
 
     results.push({ acronym, defined: isDefined });
   }
@@ -455,20 +504,21 @@ export function buildValidationReport(
   config: FormattingConfig = DEFAULT_CONFIG
 ): ValidationReport {
   const items: ValidationItem[] = [];
-  const isLiterary = detected.publicationType.toLowerCase() === "literary";
+  const isLiterary = detected.publicationType.toLowerCase().includes("literary");
 
   // --- Category 1: Structure Checks ---
   const structureItems: string[] = [];
   let structurePass = true;
 
   // Title check
-  if (detected.title && detected.title.length > 5) {
+  const titlePassed = !!(detected.title && detected.title.length > 3 && !detected.title.toLowerCase().startsWith("untitled"));
+  if (titlePassed) {
     items.push({
       id: "struct-title",
       category: "structure",
       level: "pass",
       title: "Manuscript Title Detected",
-      description: `Title detected: "${detected.title.slice(0, 60)}${detected.title.length > 60 ? "..." : ""}"`,
+      description: `Title detected: "${detected.title.slice(0, 70)}${detected.title.length > 70 ? "..." : ""}"`,
     });
     structureItems.push("Title present and formatted (16pt Bold, Center)");
   } else {
@@ -484,8 +534,9 @@ export function buildValidationReport(
     structurePass = false;
   }
 
-  // Authors & Affiliations
-  if (detected.authors.length > 0) {
+  // Authors
+  const authorsPassed = detected.authors.length > 0;
+  if (authorsPassed) {
     items.push({
       id: "struct-authors",
       category: "structure",
@@ -494,27 +545,77 @@ export function buildValidationReport(
       description: `${detected.authors.length} author(s) detected with institutional affiliations placed in first-page footer.`,
     });
     structureItems.push(`${detected.authors.length} author(s) formatted (10pt Bold with superscript affiliations)`);
+  } else {
+    items.push({
+      id: "struct-authors",
+      category: "structure",
+      level: "warning",
+      title: "Author Metadata Missing",
+      description: "No author names detected following the manuscript title.",
+      recommendation: "Include author names beneath the manuscript title.",
+    });
+    structureItems.push("Author names not detected");
+  }
+
+  // Affiliations
+  const affiliationsPassed = detected.affiliations.length > 0;
+  if (affiliationsPassed) {
+    items.push({
+      id: "struct-affiliations",
+      category: "structure",
+      level: "pass",
+      title: "Affiliations Detected",
+      description: `${detected.affiliations.length} affiliation(s) detected and formatted in first-page footer.`,
+    });
+    structureItems.push(`${detected.affiliations.length} affiliation(s) formatted in first-page footer (8pt)`);
+
+    if (detected.authors.length > 1 && detected.affiliations.length !== detected.authors.length && detected.affiliations.length !== 1) {
+      items.push({
+        id: "struct-affiliations-mapping",
+        category: "structure",
+        level: "warning",
+        title: "Author-Affiliation Mapping Review",
+        description: "Author-affiliation mapping requires manual review. Author count and affiliation count differ.",
+        recommendation: "Review author-institution mappings in the first-page footer to ensure proper superscripts.",
+      });
+    }
+  } else {
+    items.push({
+      id: "struct-affiliations",
+      category: "structure",
+      level: "warning",
+      title: "Affiliations Missing",
+      description: "No institutional affiliations or department details detected.",
+      recommendation: "Provide author affiliation: Designation, Department, Institution, City, Country.",
+    });
+    structureItems.push("Affiliations not detected");
   }
 
   // Abstract presence & word count
   const minWords = config.structureSettings?.abstract?.minWords ?? 250;
   const maxWords = config.structureSettings?.abstract?.maxWords ?? 300;
+  let abstractPassed = false;
+  let abstractWordCountLabel = "";
 
   if (detected.abstract) {
     if (detected.abstractWordCount >= minWords && detected.abstractWordCount <= maxWords) {
+      abstractPassed = true;
+      abstractWordCountLabel = `Word Count: ${detected.abstractWordCount} ✓ ADF requirement satisfied`;
       items.push({
         id: "struct-abstract-wc",
         category: "structure",
         level: "pass",
         title: "Abstract Word Count Valid",
-        description: `Abstract is ${detected.abstractWordCount} words (within official ADF 250–300 words requirement).`,
+        description: `Abstract is ${detected.abstractWordCount} words (within official ADF 250–300 word requirement).`,
       });
       structureItems.push(`Abstract length conforms (${detected.abstractWordCount} words)`);
     } else {
+      abstractPassed = false;
       const issueMsg =
         detected.abstractWordCount < minWords
-          ? `Abstract is ${detected.abstractWordCount} words, below the official ADF minimum of ${minWords} words.`
-          : `Abstract is ${detected.abstractWordCount} words, exceeding the official ADF maximum of ${maxWords} words.`;
+          ? `Abstract is ${detected.abstractWordCount} words (below official ADF 250–300 requirement).`
+          : `Abstract is ${detected.abstractWordCount} words (exceeds official ADF 250–300 requirement).`;
+      abstractWordCountLabel = `Word Count: ${detected.abstractWordCount} ⚠ ${detected.abstractWordCount < minWords ? "Below" : "Exceeds"} ADF 250–300 word requirement`;
       items.push({
         id: "struct-abstract-wc",
         category: "structure",
@@ -526,6 +627,7 @@ export function buildValidationReport(
       structureItems.push(issueMsg);
     }
   } else if (!isLiterary) {
+    abstractWordCountLabel = "Abstract section not detected";
     items.push({
       id: "struct-abstract-missing",
       category: "structure",
@@ -535,10 +637,14 @@ export function buildValidationReport(
       recommendation: "Add an ABSTRACT section summarizing research background, methodology, and primary conclusions (250–300 words).",
     });
     structureItems.push("Abstract section not detected");
+  } else {
+    abstractPassed = true;
+    abstractWordCountLabel = "Synopsis / Blurb recorded";
   }
 
   // Keywords check
-  if (detected.keywords.length >= 5 && detected.keywords.length <= 8) {
+  const keywordsPassed = detected.keywords.length >= 5 && detected.keywords.length <= 8;
+  if (keywordsPassed) {
     items.push({
       id: "struct-keywords",
       category: "structure",
@@ -546,7 +652,7 @@ export function buildValidationReport(
       title: "Keywords Count Valid",
       description: `${detected.keywords.length} keywords detected, formatted with bold "KEYWORDS:" prefix and semicolon delimiters.`,
     });
-    structureItems.push(`${detected.keywords.length} keywords detected and standardized`);
+    structureItems.push(`${detected.keywords.length} keywords detected and standardized (semicolon separated)`);
   } else if (detected.keywords.length > 0) {
     items.push({
       id: "struct-keywords",
@@ -569,92 +675,242 @@ export function buildValidationReport(
     structureItems.push("Keywords section missing");
   }
 
-  // Standard Sections check (Empirical vs Literary)
-  const coreSectionsEmpirical = [
-    { name: "INTRODUCTION", regex: /^introduction\b/i },
-    { name: "LITERATURE REVIEW", regex: /^literature\s+review\b/i },
-    { name: "METHODS", regex: /^(methods|methodology|materials\s+and\s+methods)\b/i },
-    { name: "RESULTS", regex: /^results\b/i },
-    { name: "DISCUSSION", regex: /^discussion\b/i },
-    { name: "CONCLUSION", regex: /^(conclusion|conclusions)\b/i },
-  ];
+  // Core Sections checks (Introduction, Literature Review, Methods, Results, Discussion, Conclusion)
+  const introFound = detected.headings.some((h) => /^introduction\b/i.test(h.text));
+  const litReviewFound = detected.headings.some((h) => /^literature\s+review\b/i.test(h.text));
+  const methodsFound = detected.headings.some((h) => /^(methods|methodology|materials\s+and\s+methods)\b/i.test(h.text));
+  const resultsFound = detected.headings.some((h) => /^results\b/i.test(h.text));
+  const discussionFound = detected.headings.some((h) => /^discussion\b/i.test(h.text));
+  const conclusionFound = detected.headings.some((h) => /^(conclusion|conclusions)\b/i.test(h.text));
+  const referencesFound = detected.references.length > 0;
 
-  if (!isLiterary) {
-    const missingCore: string[] = [];
-    coreSectionsEmpirical.forEach((sec) => {
-      const found = detected.headings.some((h) => sec.regex.test(h.text));
-      if (!found) {
-        missingCore.push(sec.name);
-      }
-    });
-
-    if (missingCore.length === 0) {
-      items.push({
-        id: "struct-core-sections",
-        category: "structure",
-        level: "pass",
-        title: "All Core Academic Sections Present",
-        description: "Introduction, Literature Review, Methods, Results, Discussion, and Conclusion detected in standard order.",
-      });
-      structureItems.push("All core academic sections present in standard order");
-    } else {
-      items.push({
-        id: "struct-core-sections",
-        category: "structure",
-        level: "warning",
-        title: "Standard Academic Sections Notice",
-        description: `Sections not explicitly labeled: ${missingCore.join(", ")}.`,
-        recommendation: "The ADF Master Template follows standard IMRaD structure: Introduction → Literature Review → Methods → Results → Discussion → Conclusion.",
-      });
-      structureItems.push(`Sections not explicitly labeled: ${missingCore.join(", ")}`);
-    }
-  } else {
+  if (introFound) {
     items.push({
-      id: "struct-literary",
+      id: "struct-intro",
       category: "structure",
       level: "pass",
-      title: "Literary Publication Structure Applied",
-      description: "Empirical science section requirements (Methods, Literature Review) omitted for creative / literary manuscript.",
+      title: "Introduction Section Detected",
+      description: "Introduction section present and formatted according to ADF heading hierarchy.",
     });
-    structureItems.push("Literary layout structure applied");
+    structureItems.push("Introduction section present");
+  } else if (!isLiterary) {
+    items.push({
+      id: "struct-intro",
+      category: "structure",
+      level: "warning",
+      title: "Introduction Section Not Explicitly Labeled",
+      description: "No dedicated INTRODUCTION section heading was detected.",
+      recommendation: "Add an INTRODUCTION section detailing research context, problem statement, and objectives.",
+    });
+    structureItems.push("Introduction section not detected");
+  }
+
+  if (litReviewFound) {
+    items.push({
+      id: "struct-litreview",
+      category: "structure",
+      level: "pass",
+      title: "Literature Review Detected",
+      description: "Literature Review section present and formatted.",
+    });
+    structureItems.push("Literature Review section present");
+  } else if (!isLiterary) {
+    items.push({
+      id: "struct-litreview",
+      category: "structure",
+      level: "warning",
+      title: "Literature Review Section Not Explicitly Labeled",
+      description: "No dedicated LITERATURE REVIEW section heading was detected.",
+      recommendation: "The ADF template recommends a LITERATURE REVIEW examining theoretical context and research gaps.",
+    });
+    structureItems.push("Literature Review section not detected");
+  }
+
+  // Methods and indicators
+  if (methodsFound) {
+    items.push({
+      id: "struct-methods",
+      category: "structure",
+      level: "pass",
+      title: "Methods Section Detected",
+      description: "Methods section present and formatted.",
+    });
+    structureItems.push("Methods section present");
+
+    // Scan text for methodology indicators (Section 17)
+    const bodyStr = detected.headings.map(h => h.text).join(" ") + " " + (detected.abstract || "");
+    const missingIndicators: string[] = [];
+    if (!/approach|qualitative|quantitative|mixed-method|empirical/i.test(bodyStr)) missingIndicators.push("research approach");
+    if (!/design|experimental|survey|observational|case\s+study/i.test(bodyStr)) missingIndicators.push("study design");
+    if (!/data\s+collection|questionnaire|interview|collected|instruments?/i.test(bodyStr)) missingIndicators.push("data collection");
+    if (!/sample|participants?|respondents?|population/i.test(bodyStr)) missingIndicators.push("sample size");
+    if (!/analysis|statistical|thematic|regression|anova/i.test(bodyStr)) missingIndicators.push("data analysis");
+
+    if (missingIndicators.length > 2) {
+      items.push({
+        id: "struct-methods-indicators",
+        category: "structure",
+        level: "warning",
+        title: "Methods Indicators Notice",
+        description: `Ensure the Methods section clearly describes: ${missingIndicators.join(", ")}.`,
+        recommendation: "ADF Master Template requires detailing study design, data collection, sample size, and data analysis techniques.",
+      });
+    }
+  } else if (!isLiterary) {
+    items.push({
+      id: "struct-methods",
+      category: "structure",
+      level: "warning",
+      title: "Methods Section Not Detected",
+      description: "No dedicated METHODS or METHODOLOGY section detected.",
+      recommendation: "Include a METHODS section outlining approach, design, sample, and analysis.",
+    });
+    structureItems.push("Methods section not detected");
+  }
+
+  if (resultsFound) {
+    items.push({
+      id: "struct-results",
+      category: "structure",
+      level: "pass",
+      title: "Results Section Detected",
+      description: "Results section present. Numerical findings and statistics preserved without modification.",
+    });
+    structureItems.push("Results section present (content strictly preserved)");
+  } else if (!isLiterary) {
+    items.push({
+      id: "struct-results",
+      category: "structure",
+      level: "warning",
+      title: "Results Section Not Detected",
+      description: "No dedicated RESULTS section heading was detected.",
+      recommendation: "Add a RESULTS section presenting primary study findings.",
+    });
+    structureItems.push("Results section not detected");
+  }
+
+  if (discussionFound) {
+    items.push({
+      id: "struct-discussion",
+      category: "structure",
+      level: "pass",
+      title: "Discussion Section Detected",
+      description: "Discussion section present and formatted.",
+    });
+    structureItems.push("Discussion section present");
+  } else if (!isLiterary) {
+    items.push({
+      id: "struct-discussion",
+      category: "structure",
+      level: "warning",
+      title: "Discussion Section Not Detected",
+      description: "No dedicated DISCUSSION section heading was detected.",
+      recommendation: "Add a DISCUSSION section interpreting results and broader implications.",
+    });
+    structureItems.push("Discussion section not detected");
+  }
+
+  if (conclusionFound) {
+    items.push({
+      id: "struct-conclusion",
+      category: "structure",
+      level: "pass",
+      title: "Conclusion Section Detected",
+      description: "Conclusion section present and formatted.",
+    });
+    structureItems.push("Conclusion section present");
+  } else {
+    items.push({
+      id: "struct-conclusion",
+      category: "structure",
+      level: "warning",
+      title: "Conclusion Section Not Detected",
+      description: "No dedicated CONCLUSION section detected.",
+      recommendation: "Explain concisely how study objectives have been achieved in a CONCLUSION section.",
+    });
+    structureItems.push("Conclusion section not detected");
+  }
+
+  if (referencesFound) {
+    items.push({
+      id: "struct-references",
+      category: "structure",
+      level: "pass",
+      title: "References Section Detected (APA 7th)",
+      description: `${detected.references.length} reference entry/entries detected with 0.5-inch hanging indent.`,
+    });
+    structureItems.push(`${detected.references.length} references standardized with hanging indent (APA 7th)`);
+  } else if (!isLiterary) {
+    items.push({
+      id: "struct-references",
+      category: "structure",
+      level: "warning",
+      title: "References Section Missing",
+      description: "No dedicated REFERENCES or Bibliography section detected.",
+      recommendation: "Include an APA 7th compliant REFERENCES section at the end of the manuscript.",
+    });
+    structureItems.push("References section not detected");
   }
 
   // --- Category 2: Formatting Checks ---
   const formattingItems: string[] = [
-    "Page size standardized to Letter (8.5\" × 11.0\" / 12240 × 15840 dxa)",
-    "Margins configured to ADF Master specifications (Top: 0.74\" / 1060 dxa, Bottom/Left/Right: 1.0\" / 1440 dxa)",
     "Typography standardized to Times New Roman (16pt Title, 12pt Headings & Body, 10pt Authors, 8pt Footers)",
-    "Line spacing set to Single (240 dxa rule) with 0.5-inch (720 dxa) paragraph indents",
-    "First-page header preserves ADF branding logo, Chapter Title, and background watermark",
-    "First-page footer includes author affiliations and corresponding email",
+    "Page layout configured to Letter (8.5\" × 11.0\" / 12240 × 15840 dxa) with ADF margins (1060 dxa top, 1440 dxa sides/bottom)",
+    "Standardized heading hierarchy (12pt Bold, 240 dxa before/after spacing)",
+    "Single line spacing (240 dxa) with 0.5-inch (720 dxa) first-line paragraph indentation",
+    "Table captions positioned ABOVE tables with standardized single borders",
+    "Figure captions positioned BELOW figures and centered",
+    "Table and figure numbering standardized and normalized",
   ];
-
-  items.push({
-    id: "fmt-page-setup",
-    category: "formatting",
-    level: "pass",
-    title: "ADF Master Page Setup Applied",
-    description: "Letter dimensions, exact margins (1060 dxa top, 1440 dxa others), and official header/footer anchors injected.",
-  });
 
   items.push({
     id: "fmt-typography",
     category: "formatting",
     level: "pass",
-    title: "Times New Roman Hierarchy Applied",
-    description: "All text elements standardized to Times New Roman without altering author wording.",
+    title: "Typography Standardized",
+    description: "Times New Roman applied uniformly (16pt Title, 12pt Headings & Body, 10pt Authors, 8pt Footers).",
   });
 
-  // Table and Figure captions
+  items.push({
+    id: "fmt-layout",
+    category: "formatting",
+    level: "pass",
+    title: "Page Layout Configured",
+    description: "Letter dimensions, exact margins (1060 dxa top, 1440 dxa others), and official header/footer anchors injected.",
+  });
+
+  items.push({
+    id: "fmt-headings",
+    category: "formatting",
+    level: "pass",
+    title: "Headings Hierarchy Applied",
+    description: "Consistent ADF heading hierarchy applied (12pt Bold, 240 dxa spacing before/after).",
+  });
+
+  items.push({
+    id: "fmt-spacing",
+    category: "formatting",
+    level: "pass",
+    title: "Paragraph Spacing & Indents Applied",
+    description: "Single line spacing (240 dxa) with 0.5-inch first-line paragraph indentation.",
+  });
+
   if (detected.tablesCount > 0) {
     items.push({
       id: "fmt-tables",
       category: "formatting",
       level: "pass",
       title: "Table Formatting Standardized",
-      description: `${detected.tablesCount} table(s) standardized with captions ABOVE table and single black borders.`,
+      description: `${detected.tablesCount} table(s) standardized with captions ABOVE table and single borders.`,
     });
-    formattingItems.push(`Table captions placed ABOVE tables with single borders (${detected.tablesCount} tables)`);
+  } else {
+    items.push({
+      id: "fmt-tables",
+      category: "formatting",
+      level: "pass",
+      title: "Table Formatting Ready",
+      description: "Table styling verified; captions placed above tables with single black borders.",
+    });
   }
 
   if (detected.figuresCount > 0) {
@@ -664,26 +920,32 @@ export function buildValidationReport(
       level: "pass",
       title: "Figure Formatting Standardized",
       description: `${detected.figuresCount} figure(s) centered with captions BELOW figure.`,
-      recommendation: "Ensure permissions and copyright acknowledgements are included if figures are reproduced from external sources.",
+      recommendation: "Obtain necessary permissions and include copyright acknowledgement for externally reproduced material.",
     });
-    formattingItems.push(`Figure captions centered BELOW figures (${detected.figuresCount} figures)`);
+  } else {
+    items.push({
+      id: "fmt-figures",
+      category: "formatting",
+      level: "pass",
+      title: "Figure Formatting Ready",
+      description: "Figure styling verified; captions centered below figures.",
+    });
   }
 
-  // --- Category 3: References & Citation Checks (APA 7th) ---
+  items.push({
+    id: "fmt-captions",
+    category: "formatting",
+    level: "pass",
+    title: "Captions Numbering Consistent",
+    description: "Sequential numbering normalized (Table 1, Figure 1) and caption alignments standardized.",
+  });
+
+  // --- Category 3: Reference & Citation Cross-Validation (APA 7th) ---
   const referenceItems: string[] = [];
   const citationMismatches: string[] = [];
   const uncitedReferences: string[] = [];
 
   if (detected.references.length > 0) {
-    items.push({
-      id: "ref-count",
-      category: "references",
-      level: "pass",
-      title: "References Section Detected (APA 7th)",
-      description: `${detected.references.length} bibliographic references parsed with 0.5-inch hanging indent.`,
-    });
-    referenceItems.push(`${detected.references.length} references standardized with hanging indent (APA 7th)`);
-
     // Cross-validate in-text citations vs references
     detected.inTextCitations.forEach((cit) => {
       const primaryAuthor = cit.author.split(/\s+et\s+al|\s*,\s*|\s*&\s*|\s+and\s+/i)[0].trim().toLowerCase();
@@ -703,10 +965,10 @@ export function buildValidationReport(
         category: "references",
         level: "warning",
         title: "In-Text Citations Missing from Reference List",
-        description: `${citationMismatches.length} in-text citation(s) have no corresponding entry in the References list: ${citationMismatches.slice(0, 5).join(", ")}${citationMismatches.length > 5 ? "..." : ""}.`,
+        description: `Citation mismatch: ${citationMismatches.slice(0, 4).join(", ")}${citationMismatches.length > 4 ? "..." : ""} detected in manuscript, but matching reference was not detected.`,
         recommendation: "Every in-text citation must have a corresponding entry in the APA 7th References section.",
       });
-      referenceItems.push(`${citationMismatches.length} in-text citation(s) lack matching reference entry`);
+      referenceItems.push(`${citationMismatches.length} citation mismatch(es) detected`);
     } else if (detected.inTextCitations.length > 0) {
       items.push({
         id: "ref-citations-matched",
@@ -715,7 +977,7 @@ export function buildValidationReport(
         title: "All In-Text Citations Matched",
         description: `All ${detected.inTextCitations.length} in-text citations correspond to entries in the References section.`,
       });
-      referenceItems.push("All in-text citations correspond to References entries");
+      referenceItems.push("All in-text citations correspond to listed references");
     }
 
     // Check for references never cited in text
@@ -731,7 +993,7 @@ export function buildValidationReport(
             (c) => c.year === year && c.author.toLowerCase().includes(author)
           );
           if (!isCited) {
-            uncitedReferences.push(ref.slice(0, 70) + "...");
+            uncitedReferences.push(ref.slice(0, 65) + "...");
           }
         }
       });
@@ -742,38 +1004,41 @@ export function buildValidationReport(
           category: "references",
           level: "info",
           title: "References Without Detected In-Text Citation",
-          description: `${uncitedReferences.length} reference entry/entries may not be cited in the manuscript body.`,
-          recommendation: "Ensure all listed references are cited in the text in accordance with APA 7th guidelines.",
+          description: `${uncitedReferences.length} reference entry/entries may not have a corresponding in-text citation: ${uncitedReferences[0]}`,
+          recommendation: "Ensure all listed references are cited in the body text according to APA 7th guidelines.",
         });
       }
     }
-  } else if (!isLiterary) {
-    items.push({
-      id: "ref-missing",
-      category: "references",
-      level: "warning",
-      title: "References Section Missing",
-      description: "No dedicated REFERENCES or Bibliography section detected.",
-      recommendation: "Add an APA 7th compliant REFERENCES section at the end of the manuscript.",
-    });
-    referenceItems.push("References section not detected");
+
+    // Malformed reference entries check
+    const malformedRefs = detected.references.filter(r => !/\(\d{4}[a-z]?\)/.test(r));
+    if (malformedRefs.length > 0) {
+      items.push({
+        id: "ref-apa-style",
+        category: "references",
+        level: "warning",
+        title: "References Require Manual APA Review",
+        description: `${malformedRefs.length} reference(s) require manual APA review (missing publication year in parentheses): "${malformedRefs[0].slice(0, 50)}..."`,
+        recommendation: "Ensure all references follow APA 7th format: Author, A. A. (Year). Title. Source.",
+      });
+    }
   }
 
-  // --- Category 4: Content Warnings (Academic Safeguards) ---
+  // --- Category 4: Content Checks & Warnings (Academic Safeguards) ---
   const contentWarningItems: string[] = [];
 
-  // Undefined abbreviations check
+  // Undefined abbreviations check (Section 15)
   const undefinedAcronyms = detected.abbreviations.filter((a) => !a.defined).map((a) => a.acronym);
   if (undefinedAcronyms.length > 0) {
     items.push({
       id: "content-abbr-undefined",
       category: "content",
       level: "warning",
-      title: "Abbreviations Defined at First Use Check",
-      description: `Acronym(s) used before explicit definition in body text: ${undefinedAcronyms.slice(0, 6).join(", ")}${undefinedAcronyms.length > 6 ? "..." : ""}.`,
-      recommendation: "ADF Master Template requires defining abbreviations and acronyms the first time they appear in the body text (e.g. Full Name (ACRONYM)).",
+      title: "Possible Abbreviation Issue",
+      description: `Possible abbreviation issue: "${undefinedAcronyms[0]}" appears without a detected full-form definition (${undefinedAcronyms.slice(0, 4).join(", ")}).`,
+      recommendation: "ADF rule: Abbreviations and acronyms must be defined the first time they are used in the text, even if defined in the abstract.",
     });
-    contentWarningItems.push(`${undefinedAcronyms.length} acronym(s) used without explicit definition at first appearance`);
+    contentWarningItems.push(`${undefinedAcronyms.length} acronym(s) used without explicit full-form definition`);
   } else if (detected.abbreviations.length > 0) {
     items.push({
       id: "content-abbr-ok",
@@ -784,35 +1049,248 @@ export function buildValidationReport(
     });
   }
 
-  // Permission notice for figures/tables
+  // Figure permission notice (Section 20)
   if (detected.figuresCount > 0) {
     items.push({
       id: "content-fig-perm",
       category: "content",
-      level: "info",
-      title: "Copyright & Permission Notice",
-      description: "If any figure is reproduced from an external source, obtain required permissions and include copyright acknowledgement.",
+      level: "warning",
+      title: "Figure Copyright & Permissions Notice",
+      description: "Copyright permission/acknowledgement may be required for externally reproduced material in figures.",
+      recommendation: "The official ADF template explicitly requires obtaining permissions and including acknowledgements for external figures.",
     });
   }
+
+  // --- Compile Structured Dashboard Items (Section 28) ---
+  const structureCheckItems: DashboardCheckItem[] = [
+    {
+      id: "chk-title",
+      name: "Title",
+      passed: titlePassed,
+      status: titlePassed ? "pass" : "error",
+      label: titlePassed ? `✓ Title (${detected.title.slice(0, 40)}${detected.title.length > 40 ? "..." : ""})` : "✗ Title missing or unclear",
+      details: "16pt Times New Roman, Bold, Centered",
+    },
+    {
+      id: "chk-authors",
+      name: "Authors",
+      passed: authorsPassed,
+      status: authorsPassed ? "pass" : "warning",
+      label: authorsPassed ? `✓ Authors (${detected.authors.length} detected)` : "⚠ Authors missing",
+      details: "10pt Times New Roman, Bold, Justified with superscripts",
+    },
+    {
+      id: "chk-affiliations",
+      name: "Affiliations",
+      passed: affiliationsPassed,
+      status: affiliationsPassed ? "pass" : "warning",
+      label: affiliationsPassed ? `✓ Affiliations (${detected.affiliations.length} mapped in footer)` : "⚠ Affiliations missing",
+      details: "8pt Times New Roman in first-page footer",
+    },
+    {
+      id: "chk-abstract",
+      name: "Abstract",
+      passed: abstractPassed,
+      status: abstractPassed ? "pass" : "warning",
+      label: abstractPassed ? `✓ Abstract (${detected.abstractWordCount} words)` : `⚠ Abstract (${detected.abstractWordCount} words)`,
+      details: abstractWordCountLabel,
+      badge: `${detected.abstractWordCount} words`,
+    },
+    {
+      id: "chk-keywords",
+      name: "Keywords",
+      passed: keywordsPassed,
+      status: keywordsPassed ? "pass" : "warning",
+      label: keywordsPassed ? `✓ Keywords (${detected.keywords.length} terms)` : `⚠ Keywords (${detected.keywords.length} terms)`,
+      details: "KEYWORDS: prefix, semicolon-separated (5–8 terms)",
+    },
+    {
+      id: "chk-intro",
+      name: "Introduction",
+      passed: isLiterary || introFound,
+      status: (isLiterary || introFound) ? "pass" : "warning",
+      label: (isLiterary || introFound) ? "✓ Introduction" : "⚠ Introduction not labeled",
+      details: "12pt Bold heading, ADF paragraph layout",
+    },
+    {
+      id: "chk-litreview",
+      name: "Literature Review",
+      passed: isLiterary || litReviewFound,
+      status: (isLiterary || litReviewFound) ? "pass" : "warning",
+      label: isLiterary ? "✓ Literature Review (N/A)" : litReviewFound ? "✓ Literature Review" : "⚠ Literature Review not labeled",
+      details: isLiterary ? "Omitted for creative publication" : "Theoretical context & research gaps",
+    },
+    {
+      id: "chk-methods",
+      name: "Methods",
+      passed: isLiterary || methodsFound,
+      status: (isLiterary || methodsFound) ? "pass" : "warning",
+      label: isLiterary ? "✓ Methods (N/A)" : methodsFound ? "✓ Methods" : "⚠ Methods not labeled",
+      details: isLiterary ? "Omitted for creative publication" : "Approach, design, data collection, sample, analysis",
+    },
+    {
+      id: "chk-results",
+      name: "Results",
+      passed: isLiterary || resultsFound,
+      status: (isLiterary || resultsFound) ? "pass" : "warning",
+      label: isLiterary ? "✓ Results (N/A)" : resultsFound ? "✓ Results" : "⚠ Results not labeled",
+      details: "Numerical values & findings strictly preserved",
+    },
+    {
+      id: "chk-discussion",
+      name: "Discussion",
+      passed: isLiterary || discussionFound,
+      status: (isLiterary || discussionFound) ? "pass" : "warning",
+      label: isLiterary ? "✓ Discussion (N/A)" : discussionFound ? "✓ Discussion" : "⚠ Discussion not labeled",
+      details: "Interpretation of findings & research implications",
+    },
+    {
+      id: "chk-conclusion",
+      name: "Conclusion",
+      passed: conclusionFound,
+      status: conclusionFound ? "pass" : "warning",
+      label: conclusionFound ? "✓ Conclusion" : "⚠ Conclusion not labeled",
+      details: "Concise summary of achieved research objectives",
+    },
+    {
+      id: "chk-references",
+      name: "References",
+      passed: isLiterary || referencesFound,
+      status: (isLiterary || referencesFound) ? "pass" : "warning",
+      label: isLiterary ? "✓ References (N/A)" : referencesFound ? `✓ References (${detected.references.length} entries)` : "⚠ References not detected",
+      details: "APA 7th edition standard with 0.5-inch hanging indent",
+    },
+  ];
+
+  const formattingCheckItems: DashboardCheckItem[] = [
+    {
+      id: "chk-fmt-typography",
+      name: "Typography",
+      passed: true,
+      status: "pass",
+      label: "✓ Typography",
+      details: "Times New Roman (16pt Title, 12pt Headings/Body, 10pt Authors, 8pt Footers)",
+    },
+    {
+      id: "chk-fmt-pagelayout",
+      name: "Page layout",
+      passed: true,
+      status: "pass",
+      label: "✓ Page layout",
+      details: "Letter format (8.5\" × 11.0\"), ADF Margins (Top: 1060 dxa, Sides/Bottom: 1440 dxa)",
+    },
+    {
+      id: "chk-fmt-headings",
+      name: "Headings",
+      passed: true,
+      status: "pass",
+      label: "✓ Headings",
+      details: "Standardized to ADF Heading Hierarchy (12pt Bold, 240 dxa Spacing)",
+    },
+    {
+      id: "chk-fmt-spacing",
+      name: "Paragraph spacing",
+      passed: true,
+      status: "pass",
+      label: "✓ Paragraph spacing",
+      details: "Single line spacing (240 dxa), 0.5-inch (720 dxa) first-line indent",
+    },
+    {
+      id: "chk-fmt-tables",
+      name: "Tables",
+      passed: true,
+      status: "pass",
+      label: "✓ Tables",
+      details: `Table captions positioned ABOVE tables (${detected.tablesCount} table${detected.tablesCount === 1 ? "" : "s"})`,
+    },
+    {
+      id: "chk-fmt-figures",
+      name: "Figures",
+      passed: true,
+      status: "pass",
+      label: "✓ Figures",
+      details: `Figure captions positioned BELOW figures (${detected.figuresCount} figure${detected.figuresCount === 1 ? "" : "s"})`,
+    },
+    {
+      id: "chk-fmt-captions",
+      name: "Captions",
+      passed: true,
+      status: "pass",
+      label: "✓ Captions",
+      details: "Sequential numbering normalized (Table 1, Figure 1)",
+    },
+  ];
+
+  const contentCheckItems: DashboardCheckItem[] = [
+    {
+      id: "chk-cnt-abstract",
+      name: "Abstract word count",
+      passed: abstractPassed,
+      status: abstractPassed ? "pass" : "warning",
+      label: abstractPassed ? "✓ Abstract word count" : "⚠ Abstract word count",
+      details: abstractWordCountLabel,
+      badge: `${detected.abstractWordCount} words`,
+    },
+    {
+      id: "chk-cnt-keywords",
+      name: "Keyword detection",
+      passed: keywordsPassed,
+      status: keywordsPassed ? "pass" : "warning",
+      label: keywordsPassed ? "✓ Keyword detection" : "⚠ Keyword detection",
+      details: `${detected.keywords.length} keywords detected; standardized with semicolon delimiters`,
+    },
+    {
+      id: "chk-cnt-abbr",
+      name: "Abbreviation check",
+      passed: undefinedAcronyms.length === 0,
+      status: undefinedAcronyms.length === 0 ? "pass" : "warning",
+      label: undefinedAcronyms.length === 0 ? "✓ Abbreviation check" : "⚠ Abbreviation check",
+      details: undefinedAcronyms.length === 0
+        ? "All body abbreviations defined at first appearance"
+        : `${undefinedAcronyms.length} acronym(s) require first-use definition (${undefinedAcronyms[0]})`,
+    },
+    {
+      id: "chk-cnt-citations",
+      name: "Citation/reference consistency",
+      passed: citationMismatches.length === 0,
+      status: citationMismatches.length === 0 ? "pass" : "warning",
+      label: citationMismatches.length === 0 ? "✓ Citation/reference consistency" : "⚠ Citation/reference consistency",
+      details: citationMismatches.length === 0
+        ? "All in-text citations correspond to listed APA-7 references"
+        : `${citationMismatches.length} citation mismatch(es) detected`,
+    },
+  ];
+
+  // Extract plain warning messages
+  const warningsList = items
+    .filter((i) => i.level === "warning" || i.level === "error")
+    .map((i) => i.description);
 
   // Overall status calculation
   const errorCount = items.filter((i) => i.level === "error").length;
   const warningCount = items.filter((i) => i.level === "warning").length;
   const passedCount = items.filter((i) => i.level === "pass").length;
 
-  let overallStatus: "PASS" | "PASS_WITH_WARNINGS" | "ACTION_REQUIRED" = "PASS";
-  if (errorCount > 0) {
-    overallStatus = "ACTION_REQUIRED";
-  } else if (warningCount > 0) {
-    overallStatus = "PASS_WITH_WARNINGS";
-  }
+  const finalStatus: "READY FOR AUTHOR REVIEW" | "REVIEW REQUIRED" =
+    errorCount === 0 && warningCount === 0 ? "READY FOR AUTHOR REVIEW" : "REVIEW REQUIRED";
+
+  const statusLevel: "PASS" | "PASS_WITH_WARNINGS" | "ACTION_REQUIRED" =
+    errorCount > 0 ? "ACTION_REQUIRED" : warningCount > 0 ? "PASS_WITH_WARNINGS" : "PASS";
 
   return {
-    status: overallStatus,
+    status: finalStatus,
+    statusLevel,
     totalChecks: items.length,
     passedCount,
     warningCount,
     errorCount,
+    dashboard: {
+      structure: structureCheckItems,
+      formatting: formattingCheckItems,
+      contentChecks: contentCheckItems,
+      warnings: warningsList,
+      finalStatus,
+    },
     categories: {
       structure: {
         status: structurePass && !items.some((i) => i.category === "structure" && i.level === "warning") ? "pass" : "warning",

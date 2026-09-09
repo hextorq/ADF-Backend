@@ -1,4 +1,4 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import multer from "multer";
 import { formatterController } from "./formatter.controller.js";
 
@@ -16,6 +16,8 @@ router.get("/config", formatterController.getConfig);
 
 // Admin Endpoints
 router.put("/config", formatterController.updateConfig);
+router.post("/template/upload", upload.single("template"), formatterController.uploadTemplate);
 router.get("/submissions", formatterController.getSubmissions);
+router.patch("/submissions/:id/status", formatterController.updateSubmissionStatus);
 
 export default router;
