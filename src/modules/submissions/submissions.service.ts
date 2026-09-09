@@ -21,26 +21,31 @@ export const submissionService = {
     files: { manuscriptUrl: string; coverUrl?: string; authorPhotoUrl?: string }
   ) {
     const submissionId = generateSubmissionId();
+    const isCampaign = Boolean(data.campaignId);
+    const initialPaymentStatus = 'Free';
 
     const query = `
       INSERT INTO literary_submissions (
         id, author_name, author_email, author_phone, author_country, author_address, author_bio, author_photo_url,
         book_title, book_subtitle, book_genre, book_language, word_count, page_count, synopsis, keywords,
         manuscript_url, cover_url, package_id, 
-        agreed_original, agreed_copyright, agreed_not_published, agreed_policies
+        agreed_original, agreed_copyright, agreed_not_published, agreed_policies,
+        campaign_id, campaign_name, submission_type, author_instagram, payment_status
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8,
         $9, $10, $11, $12, $13, $14, $15, $16,
         $17, $18, $19,
-        $20, $21, $22, $23
-      ) RETURNING id, status, payment_status, package_id;
+        $20, $21, $22, $23,
+        $24, $25, $26, $27, $28
+      ) RETURNING id, status, payment_status, package_id, campaign_id, campaign_name, submission_type;
     `;
 
     const values = [
       submissionId, data.authorName, data.authorEmail, data.authorPhone, data.authorCountry, data.authorAddress, data.authorBio || null, files.authorPhotoUrl || null,
       data.bookTitle, data.bookSubtitle || null, data.bookGenre, data.bookLanguage, data.wordCount, data.pageCount || null, data.synopsis, data.keywords || null,
       files.manuscriptUrl, files.coverUrl || null, data.packageId || null,
-      data.agreedOriginal, data.agreedCopyright, data.agreedNotPublished, data.agreedPolicies
+      data.agreedOriginal, data.agreedCopyright, data.agreedNotPublished, data.agreedPolicies,
+      data.campaignId || null, data.campaignName || null, data.submissionType || null, data.authorInstagram || null, initialPaymentStatus
     ];
 
     const result = await pool.query(query, values);

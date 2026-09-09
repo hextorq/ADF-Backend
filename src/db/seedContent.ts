@@ -509,7 +509,7 @@ seed("boardApplication.form.submitting", "Submitting...");
 seed("boardApplication.form.submit", "Submit Application");
 
 const journalRows = [
-  ["IJEAE", "International Journal of English for Academic Excellence", "Online ISSN - Forthcoming", "Applied linguistics, academic writing, ELT, literature studies.", "Quarterly", "Open Access - CC BY 4.0"],
+  ["IJEAE", "International Journal of English for Academic Excellence", "Online ISSN - Forthcoming", "Applied linguistics, academic writing, ELT, literature studies.", "Bi-Monthly", "Open Access - CC BY 4.0"],
   ["AJMR", "ADF Journal of Multidisciplinary Research", "Online ISSN - Forthcoming", "Cross-disciplinary research across sciences, humanities, and management.", "Bi-annual", "Open Access - CC BY 4.0"],
   ["AREP", "ADF Review of Education & Pedagogy", "Coming 2026", "Education policy, classroom research, teacher education, EdTech.", "Bi-annual", "Open Access - CC BY 4.0"],
 ];

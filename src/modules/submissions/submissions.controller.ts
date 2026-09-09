@@ -26,10 +26,22 @@ export const submissionController = {
 
   async submit(req: Request, res: Response) {
     try {
-      // Parse body string values from FormData
+      // Parse and sanitize body values from FormData
       const parsedBody = {
         ...req.body,
-        wordCount: Number(req.body.wordCount),
+        authorName: req.body.authorName?.trim(),
+        authorEmail: req.body.authorEmail?.trim()?.toLowerCase(),
+        authorPhone: req.body.authorPhone?.trim(),
+        authorCountry: req.body.authorCountry?.trim() || "India",
+        authorAddress: req.body.authorAddress?.trim() || "Address provided upon request",
+        authorBio: req.body.authorBio?.trim() || "",
+        authorInstagram: req.body.authorInstagram?.trim() || "",
+        bookTitle: req.body.bookTitle?.trim(),
+        bookGenre: req.body.bookGenre?.trim() || "General",
+        bookLanguage: req.body.bookLanguage?.trim() || "English",
+        synopsis: req.body.synopsis?.trim() || (req.body.bookTitle ? `${req.body.bookTitle.trim()} - creative work submission` : "Creative piece submission"),
+        keywords: req.body.keywords?.trim() || "",
+        wordCount: req.body.wordCount,
         pageCount: req.body.pageCount ? Number(req.body.pageCount) : undefined,
         packageId: req.body.packageId ? Number(req.body.packageId) : undefined,
         agreedOriginal: req.body.agreedOriginal === 'true',
@@ -61,7 +73,12 @@ export const submissionController = {
     } catch (error: any) {
       console.error("Error creating submission:", error);
       if (error.name === "ZodError") {
-        return res.status(400).json({ error: "Validation failed", details: error.errors });
+        const errorMessages = error.errors.map((e: any) => {
+          const field = e.path && e.path.length ? e.path.join('.') : 'Field';
+          return `${field}: ${e.message}`;
+        });
+        const errorMessage = errorMessages.length > 0 ? `Validation failed: ${errorMessages.join(', ')}` : "Validation failed";
+        return res.status(400).json({ error: errorMessage, details: error.errors });
       }
       res.status(500).json({ error: "Internal server error" });
     }

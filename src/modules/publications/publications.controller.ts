@@ -22,7 +22,8 @@ export const updateLiterarySubmission = async (req: Request, res: Response) => {
   const { 
     current_stage, editor_assigned, isbn, 
     author_name, author_email, author_phone, author_country, author_bio,
-    book_title, book_subtitle, book_genre, book_language, word_count, synopsis
+    book_title, book_subtitle, book_genre, book_language, word_count, synopsis,
+    campaign_id, campaign_name, submission_type, author_instagram
   } = req.body;
   
   try {
@@ -33,7 +34,8 @@ export const updateLiterarySubmission = async (req: Request, res: Response) => {
     const fieldsToUpdate = {
       current_stage, editor_assigned, isbn,
       author_name, author_email, author_phone, author_country, author_bio,
-      book_title, book_subtitle, book_genre, book_language, word_count, synopsis
+      book_title, book_subtitle, book_genre, book_language, word_count, synopsis,
+      campaign_id, campaign_name, submission_type, author_instagram
     };
 
     for (const [key, value] of Object.entries(fieldsToUpdate)) {
