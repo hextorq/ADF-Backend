@@ -27,8 +27,15 @@ const boardApplicationSchema = z.object({
 export async function createContactSubmission(req: Request, res: Response) {
   const parsed = contactSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid contact submission" });
+    console.error("[Contact Validation Error]", parsed.error.flatten());
+    const firstIssue = parsed.error.issues[0];
+    const fieldName = firstIssue?.path?.join(".") || "field";
+    return res.status(400).json({ 
+      error: `Invalid ${fieldName}: ${firstIssue?.message || "validation failed"}`,
+      details: parsed.error.flatten() 
+    });
   }
+
 
   // 1. Persist to database
   const row = await saveContactSubmission(parsed.data);
