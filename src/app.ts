@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import path from "node:path";
@@ -49,5 +49,10 @@ app.use("/api/programmes", programmesRouter);
 app.use("/api/bookstore", bookstoreRouter);
 app.use("/api/files", filesRouter);
 app.use("/api/formatter", formatterRouter);
+
+// Ensure any unhandled /api route returns JSON 404 rather than HTML
+app.use("/api/*", (_req, res) => {
+  res.status(404).json({ error: "Endpoint not found" });
+});
 
 app.use(errorHandler);
