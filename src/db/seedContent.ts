@@ -297,7 +297,7 @@ seed("home.video.eyebrow", "ADF PUBLISHER CHANNEL");
 seed("home.video.title", "Learn with ADF");
 seed(
   "home.video.description",
-  "Watch tutorials, publishing guidelines, webinars, author interviews, and research insights from the Academic Development Forum YouTube Channel."
+  "Watch tutorials, publishing guidelines, webinars, author interviews, and research insights from the ADF (Academic Development Forum) YouTube Channel."
 );
 seed("home.video.feature.1", "Step-by-step submission guides");
 seed("home.video.feature.2", "Expert webinar recordings");
