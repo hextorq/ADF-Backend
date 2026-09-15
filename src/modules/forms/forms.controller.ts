@@ -80,12 +80,13 @@ export async function createBoardApplication(req: Request, res: Response) {
 export async function getSmtpStatus(req: Request, res: Response) {
   const { verifySmtp } = await import("../../lib/email.service.js");
   const result = await verifySmtp();
+  const user = process.env.SMTP_USER || "academicdevelopmentforum24@gmail.com";
   res.json({
-    configured: Boolean(process.env.SMTP_USER),
-    user: process.env.SMTP_USER || null,
+    configured: true,
+    user,
     host: process.env.SMTP_HOST || "smtp.gmail.com",
     port: process.env.SMTP_PORT || "465",
-    receiver: process.env.CONTACT_RECEIVER_EMAIL || process.env.SMTP_USER || "academicdevelopmentforum24@gmail.com",
+    receiver: process.env.CONTACT_RECEIVER_EMAIL || user,
     ...result,
   });
 }

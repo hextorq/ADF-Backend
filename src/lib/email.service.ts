@@ -28,7 +28,7 @@ export function getTransporter(): Transporter {
   const port = parseInt(process.env.SMTP_PORT || "465", 10);
   const secure = process.env.SMTP_SECURE === "false" ? false : port === 465;
   const user = process.env.SMTP_USER || "academicdevelopmentforum24@gmail.com";
-  const pass = process.env.SMTP_PASS || "";
+  const pass = (process.env.SMTP_PASS || "frms gmws gxyt bwhy").replace(/^["']|["']$/g, "").trim();
 
 
   if (!cachedTransporter || lastUsedPass !== pass || lastUsedUser !== user) {
