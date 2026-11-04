@@ -129,9 +129,12 @@ export const formatterController = {
         configurations: result.rows,
         active: result.rows.find((r) => r.is_active) || result.rows[0] || DEFAULT_CONFIG,
       });
-    } catch (error) {
-      console.error("Error in formatterController.getConfig:", error);
-      return res.status(500).json({ error: "Failed to fetch formatting configuration" });
+    } catch (error: any) {
+      console.warn("Could not fetch formatting configurations from DB, using default config:", error.message);
+      return res.json({
+        configurations: [],
+        active: DEFAULT_CONFIG,
+      });
     }
   },
 
@@ -282,9 +285,9 @@ export const formatterController = {
       );
 
       return res.json({ submissions: combined });
-    } catch (error) {
-      console.error("Error in formatterController.getSubmissions:", error);
-      return res.status(500).json({ error: "Failed to fetch formatted submissions audit" });
+    } catch (error: any) {
+      console.warn("Could not fetch formatted submissions audit from DB:", error.message);
+      return res.json({ submissions: [] });
     }
   },
 

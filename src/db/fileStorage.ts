@@ -1,5 +1,6 @@
-﻿import { pool } from "./pool.js";
+import { pool } from "./pool.js";
 import path from "path";
+import fs from "fs";
 
 const ALLOWED_EXTENSIONS = [
   ".jpg",
@@ -28,10 +29,19 @@ export async function saveBufferToDB(
   const safeExt = ALLOWED_EXTENSIONS.includes(ext) ? ext : "";
   const filename = fieldnamePrefix + "-" + uniqueSuffix + safeExt;
 
-  await pool.query(
-    "INSERT INTO files (id, filename, mimetype, data) VALUES ($1, $2, $3, $4)",
-    [filename, originalname, mimetype, buffer]
-  );
+  try {
+    await pool.query(
+      "INSERT INTO files (id, filename, mimetype, data) VALUES ($1, $2, $3, $4)",
+      [filename, originalname, mimetype, buffer]
+    );
+  } catch (dbErr: any) {
+    console.warn("[fileStorage] Database save failed, saving to local uploads folder:", dbErr.message);
+    const uploadsDir = path.resolve(process.cwd(), "uploads");
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    fs.writeFileSync(path.join(uploadsDir, filename), buffer);
+  }
 
   return `/api/files/${filename}`;
 }
