@@ -25,6 +25,7 @@ export const formatterController = {
       }
 
       const publicationType = (req.body.publicationType || "Book Chapters").trim();
+      const requestedProfile = req.body.profile ? (req.body.profile as any) : undefined;
 
       // 1. Fetch active formatting configuration from database
       let activeConfig: FormattingConfig = DEFAULT_CONFIG;
@@ -47,7 +48,7 @@ export const formatterController = {
       }
 
       // 2. Execute document parser and formatting engine
-      const result = await processManuscript(req.file.buffer, originalFilename, activeConfig, publicationType);
+      const result = await processManuscript(req.file.buffer, originalFilename, activeConfig, publicationType, requestedProfile);
 
       // 3. Save original file to database storage
       const originalFileUrl = await saveFileToDB(req.file);
@@ -106,6 +107,7 @@ export const formatterController = {
         originalHtml: result.originalHtml,
         formattedHtml: result.formattedHtml,
         publicationType,
+        profile: result.profile,
       });
     } catch (error: any) {
       console.error("Error in formatterController.process:", error);
