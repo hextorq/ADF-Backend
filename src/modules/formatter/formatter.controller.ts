@@ -240,7 +240,7 @@ export const formatterController = {
           ls.formatted_manuscript_url as formatted_url,
           COALESCE(ls.formatting_version, 'ADF Master Template v1.0') as formatting_version,
           COALESCE(ls.formatting_status, 'Completed') as formatting_status,
-          COALESCE(ls.stage, 'Submitted') as submission_status,
+          COALESCE(ls.current_stage, 'Submitted') as submission_status,
           COALESCE(ls.author_confirmed_formatting, true) as author_confirmed,
           COALESCE(ls.formatting_issues, '[]'::jsonb) as issues,
           COALESCE(ls.validation_report, '{}'::jsonb) as validation_report,
@@ -357,7 +357,7 @@ export const formatterController = {
       // Update in literary_submissions
       await pool.query(
         `UPDATE literary_submissions SET 
-          stage = $1,
+          current_stage = $1,
           formatting_status = $1, 
           admin_notes = COALESCE($2, admin_notes)
          WHERE id::text = $3`,
