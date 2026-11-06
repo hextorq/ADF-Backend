@@ -132,11 +132,10 @@ export function getMasterTemplatePath(): string | null {
     "ADF_Manuscript_Template.docx",
   ];
   const candidateDirs = [
+    path.join(process.cwd(), "uploads", "templates"),
     path.join(process.cwd(), "templates"),
     path.join(process.cwd(), "ADF-Backend", "templates"),
     path.resolve(process.cwd(), "../ADF-Backend/templates"),
-    "c:\\Users\\kdon7\\Desktop\\react\\adf\\ADF-Backend\\templates",
-    "c:\\Users\\kdon7\\Downloads",
   ];
 
   for (const dir of candidateDirs) {

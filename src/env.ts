@@ -11,6 +11,8 @@ const envSchema = z.object({
   COOKIE_NAME: z.string().default("adf_session"),
   FRONTEND_ORIGIN: z.string().min(1),
   NODE_ENV: z.string().default("development"),
+  // Optional override. Defaults to <backend>/uploads.
+  UPLOADS_DIR: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

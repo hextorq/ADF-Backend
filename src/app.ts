@@ -1,9 +1,8 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { env } from "./env.js";
+import { UPLOADS_ROOT, ensureUploadsRoot } from "./lib/uploads.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { contentRouter } from "./modules/content/content.routes.js";
 import { formsRouter } from "./modules/forms/forms.routes.js";
@@ -18,8 +17,7 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { requestTiming } from "./middleware/requestTiming.js";
 
 export const app = express();
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const uploadsDir = path.resolve(__dirname, "../uploads");
+ensureUploadsRoot();
 const allowedOrigins = env.FRONTEND_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean);
 const allowAnyOrigin = allowedOrigins.includes("*");
 
@@ -37,7 +35,22 @@ app.use(cors({
 app.use(cookieParser());
 app.use(express.json());
 app.use(requestTiming);
-app.use("/uploads", express.static(uploadsDir));
+app.use(
+  "/uploads",
+  express.static(UPLOADS_ROOT, {
+    index: false,
+    dotfiles: "deny",
+    maxAge: "30d",
+    immutable: true,
+    setHeaders(res) {
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader(
+        "Content-Security-Policy",
+        "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox"
+      );
+    },
+  })
+);
 
 app.use("/api/auth", authRouter);
 app.use("/api/content", contentRouter);

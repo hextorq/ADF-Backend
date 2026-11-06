@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { pool } from "../../db/pool.js";
-import { saveFileToDB } from "../../db/fileStorage.js";
+import { UploadError, saveUpload } from "../../lib/uploads.js";
 import { sendNotificationEmail } from "../../lib/notifications.js";
 
 // --- LITERARY PUBLICATIONS ADMIN ---
@@ -157,17 +157,21 @@ export const createChapterVolume = async (req: Request, res: Response) => {
   
   const coverFile = files?.['cover_image']?.[0];
   const pdfFileObj = files?.['pdf_file']?.[0];
-  
-  const cover_url = coverFile ? await saveFileToDB(coverFile) : req.body.cover_url;
-  const pdf_url = pdfFileObj ? await saveFileToDB(pdfFileObj) : req.body.pdf_url;
-  
+
   try {
+    const cover_url = coverFile ? (await saveUpload(coverFile, "publications")).url : req.body.cover_url;
+    const pdf_url = pdfFileObj ? (await saveUpload(pdfFileObj, "publications")).url : req.body.pdf_url;
+
     const result = await pool.query(
       "INSERT INTO chapter_volumes (title, theme, description, submission_deadline, cover_url, pages, pdf_url) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
       [title, theme, description, submission_deadline, cover_url, pages, pdf_url]
     );
     res.json(result.rows[0]);
   } catch (err) {
+    if (err instanceof UploadError) {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error(err);
     res.status(500).json({ error: "Failed to create volume" });
   }
 };
@@ -179,11 +183,11 @@ export const updateChapterVolume = async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
   const coverFile = files?.['cover_image']?.[0];
   const pdfFileObj = files?.['pdf_file']?.[0];
-  
-  const cover_url = coverFile ? await saveFileToDB(coverFile) : req.body.cover_url;
-  const pdf_url = pdfFileObj ? await saveFileToDB(pdfFileObj) : req.body.pdf_url;
-  
+
   try {
+    const cover_url = coverFile ? (await saveUpload(coverFile, "publications")).url : req.body.cover_url;
+    const pdf_url = pdfFileObj ? (await saveUpload(pdfFileObj, "publications")).url : req.body.pdf_url;
+
     const result = await pool.query(
       `UPDATE chapter_volumes SET 
         title=COALESCE($1, title), 
@@ -200,6 +204,10 @@ export const updateChapterVolume = async (req: Request, res: Response) => {
     );
     res.json(result.rows[0]);
   } catch (err) {
+    if (err instanceof UploadError) {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error(err);
     res.status(500).json({ error: "Failed to update volume" });
   }
 };
@@ -233,14 +241,18 @@ export const submitChapter = async (req: Request, res: Response) => {
   
   if (!manuscript) return res.status(400).json({ error: "Manuscript is required" });
   if (!transaction_id) return res.status(400).json({ error: "Transaction ID is required" });
-  
-  const manuscriptUrl = await saveFileToDB(manuscript);
-  const paymentScreenshotUrl = paymentScreenshot ? await saveFileToDB(paymentScreenshot) : null;
-  
+
   const submissionId = `CHAP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  let inTransaction = false;
 
   try {
+    const manuscriptUrl = (await saveUpload(manuscript, "chapters")).url;
+    const paymentScreenshotUrl = paymentScreenshot
+      ? (await saveUpload(paymentScreenshot, "payments")).url
+      : null;
+
     await pool.query("BEGIN");
+    inTransaction = true;
     
     // Insert Submission
     await pool.query(
@@ -290,7 +302,12 @@ export const submitChapter = async (req: Request, res: Response) => {
 
     res.json({ success: true, submissionId });
   } catch (err) {
-    await pool.query("ROLLBACK");
+    if (inTransaction) {
+      await pool.query("ROLLBACK").catch(() => undefined);
+    }
+    if (err instanceof UploadError) {
+      return res.status(400).json({ error: err.message });
+    }
     console.error(err);
     res.status(500).json({ error: "Failed to submit chapter" });
   }

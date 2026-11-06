@@ -1,9 +1,8 @@
 import { Request, Response } from "express";
 import path from "path";
-import fs from "fs";
 import crypto from "crypto";
 import { pool } from "../../db/pool.js";
-import { saveFileToDB, saveBufferToDB } from "../../db/fileStorage.js";
+import { UploadError, saveBuffer, saveUpload } from "../../lib/uploads.js";
 import { processManuscript, DEFAULT_CONFIG, FormattingConfig } from "./formatter.engine.js";
 
 export const formatterController = {
@@ -50,18 +49,15 @@ export const formatterController = {
       // 2. Execute document parser and formatting engine
       const result = await processManuscript(req.file.buffer, originalFilename, activeConfig, publicationType, requestedProfile);
 
-      // 3. Save original file to database storage
-      const originalFileUrl = await saveFileToDB(req.file);
+      // 3. Save original file to server storage
+      const originalFileUrl = (await saveUpload(req.file, "manuscripts")).url;
 
-      // 4. Save formatted DOCX file to database storage
+      // 4. Save formatted DOCX file to server storage
       const rawName = path.parse(originalFilename).name;
       const formattedFilename = `${rawName}-ADF-Formatted.docx`;
-      const formattedFileUrl = await saveBufferToDB(
-        result.formattedBuffer,
-        formattedFilename,
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "formatted-manuscript"
-      );
+      const formattedFileUrl = (
+        await saveBuffer(result.formattedBuffer, formattedFilename, "formatted")
+      ).url;
 
       // 5. Create formatting session record
       const sessionId = `ADF-FMT-${Date.now()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
@@ -111,6 +107,9 @@ export const formatterController = {
       });
     } catch (error: any) {
       console.error("Error in formatterController.process:", error);
+      if (error instanceof UploadError) {
+        return res.status(400).json({ error: error.message });
+      }
       return res.status(500).json({
         error: "Failed to process manuscript. " + (error.message || "Unknown error"),
       });
@@ -304,15 +303,8 @@ export const formatterController = {
       const name = (req.body.name || `ADF Template (${version})`).trim();
       const isActive = req.body.isActive === "true" || req.body.isActive === true;
 
-      const templatesDir = path.join(process.cwd(), "templates");
-      if (!fs.existsSync(templatesDir)) {
-        fs.mkdirSync(templatesDir, { recursive: true });
-      }
-
-      const safeVer = version.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const targetFilename = `ADF_Template_${safeVer}.docx`;
-      const targetPath = path.join(templatesDir, targetFilename);
-      fs.writeFileSync(targetPath, req.file.buffer);
+      const savedTemplate = await saveUpload(req.file, "templates");
+      const targetFilename = savedTemplate.filename;
 
       if (isActive) {
         await pool.query("UPDATE formatting_configurations SET is_active = false");
@@ -333,6 +325,9 @@ export const formatterController = {
       return res.json({ success: true, configuration: result.rows[0], filename: targetFilename });
     } catch (err: any) {
       console.error("Error in uploadTemplate:", err);
+      if (err instanceof UploadError) {
+        return res.status(400).json({ error: err.message });
+      }
       return res.status(500).json({ error: "Failed to upload template: " + err.message });
     }
   },

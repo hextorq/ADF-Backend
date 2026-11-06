@@ -1,9 +1,8 @@
 import { Request, Response } from "express";
 import multer from "multer";
-import path from "path";
 import { CreateSubmissionSchema, UpdateSubmissionStatusSchema } from "./submissions.schema.js";
 import { submissionService } from "./submissions.service.js";
-import { saveFileToDB } from "../../db/fileStorage.js";
+import { UploadError, saveUpload } from "../../lib/uploads.js";
 
 // Setup Multer for memory uploads
 const storage = multer.memoryStorage();
@@ -58,9 +57,9 @@ export const submissionController = {
         return res.status(400).json({ error: "Manuscript file is required" });
       }
 
-      const manuscriptUrl = await saveFileToDB(files.manuscript[0]);
-      const coverUrl = files.coverImage ? await saveFileToDB(files.coverImage[0]) : undefined;
-      const authorPhotoUrl = files.authorPhoto ? await saveFileToDB(files.authorPhoto[0]) : undefined;
+      const manuscriptUrl = (await saveUpload(files.manuscript[0], "manuscripts")).url;
+      const coverUrl = files.coverImage ? (await saveUpload(files.coverImage[0], "covers")).url : undefined;
+      const authorPhotoUrl = files.authorPhoto ? (await saveUpload(files.authorPhoto[0], "author-photos")).url : undefined;
 
       const fileUrls = {
         manuscriptUrl,
@@ -72,6 +71,9 @@ export const submissionController = {
       res.status(201).json(submission);
     } catch (error: any) {
       console.error("Error creating submission:", error);
+      if (error instanceof UploadError) {
+        return res.status(400).json({ error: error.message });
+      }
       if (error.name === "ZodError") {
         const errorMessages = error.errors.map((e: any) => {
           const field = e.path && e.path.length ? e.path.join('.') : 'Field';

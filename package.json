@@ -8,6 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "migrate": "tsx src/db/migrate.ts",
+    "migrate:files": "tsx src/db/exportFilesToDisk.ts",
+    "migrate:files:apply": "tsx src/db/exportFilesToDisk.ts --apply",
     "seed:content": "tsx src/db/seedContent.ts",
     "seed:content:reset": "tsx src/db/seedContent.ts --reset"
   },
