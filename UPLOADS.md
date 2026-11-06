@@ -77,17 +77,10 @@ GET /uploads/<folder>/<file>     express.static(UPLOADS_ROOT)
 Files are served with `X-Content-Type-Options: nosniff` and a restrictive CSP,
 and can be cached for 30 days because the generated names are unique.
 
-## Legacy blobs
+## Legacy blobs (removed)
 
-Files uploaded before this change were stored in the `files` table and served by
-`GET /api/files/:id`. That route is kept for compatibility only. To move the
-remaining blobs onto disk:
-
-```bash
-npm run migrate:files          # dry run
-npm run migrate:files:apply    # write files + rewrite stored paths
-```
-
-The script writes each blob to the folder its name implies and rewrites the
-columns listed in `src/db/exportFilesToDisk.ts`. The `files` table is left
-untouched as a backup.
+Files uploaded before the disk-storage change lived in the `files` table and
+were served by `GET /api/files/:id`. They were exported to `uploads/<folder>/`,
+every stored reference was rewritten to `/uploads/...`, and migration
+`012_drop_legacy_files.sql` drops the table. That route has been removed too,
+so `/api/files/:id` now returns the normal JSON 404.

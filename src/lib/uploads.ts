@@ -234,60 +234,6 @@ export function absolutePathForUploadUrl(url: string): string | null {
   return target;
 }
 
-/**
- * Legacy support for /api/files/:id — looks for the blob on disk in the root
- * and in every one-level subfolder (new layout).
- */
-export function findLocalUpload(id: string): string | null {
-  if (!id || id.includes("..") || id.includes("/") || id.includes("\\")) return null;
-
-  const direct = path.join(UPLOADS_ROOT, id);
-  if (isFile(direct)) return direct;
-
-  let entries: fs.Dirent[] = [];
-  try {
-    entries = fs.readdirSync(UPLOADS_ROOT, { withFileTypes: true });
-  } catch {
-    return null;
-  }
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const candidate = path.join(UPLOADS_ROOT, entry.name, id);
-    if (isFile(candidate)) return candidate;
-  }
-
-  return null;
-}
-
-function isFile(candidate: string): boolean {
-  try {
-    return fs.statSync(candidate).isFile();
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Maps an old /api/files/<id> blob name to the folder it belongs in.
- * The field prefix in the generated name tells us where it came from.
- */
-export function folderForLegacyFilename(id: string): UploadFolder {
-  const name = id.toLowerCase();
-
-  if (name.startsWith("formatted-manuscript-")) return "formatted";
-  if (name.startsWith("template-")) return "templates";
-  if (name.startsWith("payment_screenshot-") || name.startsWith("payment-screenshot-")) return "payments";
-  if (name.startsWith("cover_image-")) return "publications";
-  if (name.startsWith("pdf_file-")) return "publications";
-  if (name.startsWith("coverimage-")) return "covers";
-  if (name.startsWith("authorphoto-") || name.startsWith("author_photo-")) return "author-photos";
-  if (name.startsWith("manuscript-")) return "manuscripts";
-  if (name.startsWith("image-")) return "cms";
-
-  return "misc";
-}
-
 export function mimeForFilename(filename: string): string | null {
   return MIME_BY_EXT[extensionOf(filename)] || null;
 }

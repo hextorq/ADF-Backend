@@ -11,7 +11,6 @@ import submissionsRouter from "./modules/submissions/submissions.routes.js";
 import publicationsRouter from "./modules/publications/publications.routes.js";
 import { programmesRouter } from "./modules/programmes/programmes.routes.js";
 import { bookstoreRouter } from "./modules/bookstore/bookstore.routes.js";
-import { filesRouter } from "./modules/files/files.routes.js";
 import formatterRouter from "./modules/formatter/formatter.routes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { requestTiming } from "./middleware/requestTiming.js";
@@ -60,7 +59,6 @@ app.use("/api/literary-submissions", submissionsRouter);
 app.use("/api/publications", publicationsRouter);
 app.use("/api/programmes", programmesRouter);
 app.use("/api/bookstore", bookstoreRouter);
-app.use("/api/files", filesRouter);
 app.use("/api/formatter", formatterRouter);
 
 // Ensure any unhandled /api route returns JSON 404 rather than HTML
