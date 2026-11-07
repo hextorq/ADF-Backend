@@ -289,3 +289,159 @@ function escapeHtml(str: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
+
+export interface AbstractEmailData {
+  authorName: string;
+  email: string;
+  submissionId: string;
+  abstractTitle: string;
+  researchAreaName: string;
+  paymentRef: string;
+}
+
+/**
+ * Sends an email confirming payment received and abstract acceptance.
+ */
+export async function sendAbstractAcceptanceEmail(data: AbstractEmailData): Promise<{ success: boolean; error?: string }> {
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; color: #0f172a; }
+    .card { max-width: 620px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #cbd5e1; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.08); }
+    .header { background: linear-gradient(135deg, #002147 0%, #083363 100%); color: #ffffff; padding: 28px 24px; text-align: left; border-bottom: 4px solid #0d9488; }
+    .header h1 { margin: 0 0 6px 0; font-size: 22px; font-weight: 700; color: #ffffff; }
+    .header p { margin: 0; font-size: 13px; color: #99f6e4; font-weight: 500; }
+    .content { padding: 28px 24px; line-height: 1.6; font-size: 14px; }
+    .status-badge { display: inline-block; background: #dcfce7; color: #166534; font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 9999px; margin-bottom: 16px; border: 1px solid #bbf7d0; }
+    .meta-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 18px 0; font-size: 13px; }
+    .meta-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #e2e8f0; }
+    .meta-row:last-child { border-bottom: none; }
+    .meta-label { color: #64748b; font-weight: 600; }
+    .meta-val { color: #0f172a; font-weight: 600; text-align: right; }
+    .highlight-box { background: #f0fdfa; border-left: 4px solid #0d9488; padding: 14px 16px; border-radius: 4px; margin: 18px 0; font-size: 13.5px; color: #134e4a; }
+    .footer { background: #f8fafc; padding: 18px 24px; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>Academic Development Forum</h1>
+      <p>Interdisciplinary Horizons &bull; Multidisciplinary E-Book of Abstracts 2026</p>
+    </div>
+    <div class="content">
+      <span class="status-badge">&check; Payment Received &amp; Abstract Accepted</span>
+      
+      <p>Dear <strong>${escapeHtml(data.authorName)}</strong>,</p>
+      
+      <p>Greetings from the <strong>Academic Development Forum (ADF)</strong>! We are very happy to collaborate with you.</p>
+      
+      <p>We are delighted to confirm that your <strong>payment has been received successfully</strong> and your research abstract has been <strong>ACCEPTED</strong> for publication in our upcoming international multidisciplinary volume:</p>
+      
+      <div class="highlight-box">
+        <strong>Book Volume:</strong> Interdisciplinary Horizons: Emerging Trends in Research, Innovation, and Sustainable Development<br>
+        <strong>Publication:</strong> Multidisciplinary E-Book with assigned ISBN &amp; DOI<br>
+        <strong>Publisher:</strong> Academic Development Forum (ADF)
+      </div>
+
+      <div class="meta-box">
+        <div class="meta-row">
+          <span class="meta-label">Tracking ID:</span>
+          <span class="meta-val" style="color: #002147; font-family: monospace;">${escapeHtml(data.submissionId)}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Author Name:</span>
+          <span class="meta-val">${escapeHtml(data.authorName)}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Abstract Title:</span>
+          <span class="meta-val" style="max-width: 350px;">${escapeHtml(data.abstractTitle)}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Research Track:</span>
+          <span class="meta-val">${escapeHtml(data.researchAreaName)}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Payment Status:</span>
+          <span class="meta-val" style="color: #166534;">Payment Received &amp; Verified (₹50)</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Payment / UTR Ref:</span>
+          <span class="meta-val" style="font-family: monospace;">${escapeHtml(data.paymentRef)}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Review Status:</span>
+          <span class="meta-val" style="color: #0d9488;">Accepted for Publication</span>
+        </div>
+      </div>
+
+      <p><strong>Next Steps &amp; Benefits:</strong></p>
+      <ul style="padding-left: 20px; color: #334155; font-size: 13px;">
+        <li>Your abstract will be professionally indexed and formatted into the official compendium.</li>
+        <li>An individual verifiable <strong>e-Certificate</strong> and a <strong>complimentary digital e-book copy</strong> will be emailed to you upon official release.</li>
+        <li>DOI registration will be linked to the published e-book on the official website.</li>
+      </ul>
+
+      <p>If you have any questions or require revisions, feel free to contact us at <a href="mailto:academicdevelopmentforum24@gmail.com" style="color: #0d9488; font-weight: 600;">academicdevelopmentforum24@gmail.com</a> or WhatsApp at <strong>+91 75023 98680</strong>.</p>
+
+      <p style="margin-top: 24px;">Warm regards and congratulations,<br>
+      <strong>Editorial &amp; Publication Board</strong><br>
+      Academic Development Forum (ADF)<br>
+      <a href="https://www.adf.ijeae.com" style="color: #002147; font-size: 12px;">www.adf.ijeae.com</a></p>
+    </div>
+    <div class="footer">
+      Academic Development Forum &bull; Encouraging Research &bull; Connecting Disciplines &bull; Inspiring Innovation
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const plainText = `
+Academic Development Forum (ADF)
+Payment Received & Abstract Accepted Confirmation
+======================================================
+Dear ${data.authorName},
+
+Greetings from Academic Development Forum (ADF)! We are happy to collaborate with you.
+
+We are pleased to inform you that your payment has been received successfully and your abstract has been ACCEPTED for publication in:
+"Interdisciplinary Horizons: Emerging Trends in Research, Innovation, and Sustainable Development"
+(Multidisciplinary E-Book with ISBN & DOI assignment).
+
+Submission Details:
+- Tracking ID: ${data.submissionId}
+- Author Name: ${data.authorName}
+- Abstract Title: ${data.abstractTitle}
+- Research Track: ${data.researchAreaName}
+- Payment Status: Payment Received & Verified (₹50)
+- Payment / UTR Reference: ${data.paymentRef}
+- Review Status: Accepted for Publication
+
+Benefits Included:
+1. Publication in multidisciplinary e-book
+2. ISBN and DOI registration
+3. Individual verifiable e-Certificate
+4. Free digital copy of the published volume
+
+Contact & Support:
+Email: academicdevelopmentforum24@gmail.com
+WhatsApp: +91 75023 98680
+Official Website: https://www.adf.ijeae.com
+
+Warm regards and congratulations,
+Editorial & Publication Board
+Academic Development Forum (ADF)
+======================================================
+  `.trim();
+
+  return await sendEmail({
+    to: data.email,
+    subject: `[ADF Accepted] Payment Received & Abstract Accepted: "${data.abstractTitle}" [ID: ${data.submissionId}]`,
+    text: plainText,
+    html: htmlContent,
+  });
+}

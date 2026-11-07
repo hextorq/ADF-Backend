@@ -1,3 +1,4 @@
+import { sendAbstractAcceptanceEmail } from "../../lib/email.service.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -217,6 +218,17 @@ export const abstractService = {
 
     list[idx].review_status = review_status;
     list[idx].updated_at = new Date().toISOString();
+
+    if (review_status === "Accepted") {
+      sendAbstractAcceptanceEmail({
+        authorName: list[idx].author_name,
+        email: list[idx].email,
+        submissionId: list[idx].id,
+        abstractTitle: list[idx].abstract_title,
+        researchAreaName: list[idx].research_area_name,
+        paymentRef: list[idx].payment_ref,
+      }).catch((e) => console.warn("[AbstractService] Acceptance email error:", (e as Error).message));
+    }
     if (admin_notes !== undefined) {
       list[idx].admin_notes = admin_notes;
     }
