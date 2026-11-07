@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { pool } from "../../db/pool.js";
 import { UploadError, saveUpload } from "../../lib/uploads.js";
 import { sendNotificationEmail } from "../../lib/notifications.js";
+import { abstractService } from "./abstracts.service.js";
 
 // --- LITERARY PUBLICATIONS ADMIN ---
 
@@ -404,3 +405,186 @@ export const deleteChapterSubmission = async (req: Request, res: Response) => {
   }
 };
 
+
+
+// --- CALL FOR ABSTRACTS ---
+
+export const getAbstractSubmissions = async (req: Request, res: Response) => {
+  try {
+    const list = await abstractService.getAll();
+    res.json(list);
+  } catch (err) {
+    console.error("[AbstractController] Failed to fetch submissions:", err);
+    res.status(500).json({ error: "Failed to fetch submissions" });
+  }
+};
+
+export const submitAbstract = async (req: Request, res: Response) => {
+  try {
+    const {
+      author_name,
+      author_type,
+      department,
+      institution,
+      email,
+      phone,
+      research_area_id,
+      research_area_name,
+      abstract_title,
+      abstract_text,
+      keywords,
+      is_sole_author,
+      payment_status,
+      payment_ref,
+    } = req.body;
+
+    if (!author_name || !email || !abstract_title || !abstract_text) {
+      return res.status(400).json({ error: "Author name, email, title, and abstract text are required." });
+    }
+
+    const manuscript = (req.files as any)?.manuscript?.[0];
+    const paymentScreenshot = (req.files as any)?.payment_screenshot?.[0];
+
+    let manuscript_url: string | null = null;
+    let payment_screenshot_url: string | null = null;
+
+    if (manuscript) {
+      const saved = await saveUpload(manuscript, "manuscripts");
+      manuscript_url = saved.url;
+    }
+
+    if (paymentScreenshot) {
+      const saved = await saveUpload(paymentScreenshot, "payments");
+      payment_screenshot_url = saved.url;
+    }
+
+    const wordCount = abstract_text.trim().split(/\s+/).filter(Boolean).length;
+
+    const submission = await abstractService.create({
+      author_name,
+      author_type: author_type || "Research Scholar",
+      department: department || "",
+      institution: institution || "",
+      email,
+      phone: phone || "",
+      research_area_id: research_area_id || "interdisciplinary",
+      research_area_name: research_area_name || "Interdisciplinary Studies",
+      abstract_title,
+      abstract_text,
+      word_count: wordCount,
+      keywords: keywords || "",
+      is_sole_author: is_sole_author === true || is_sole_author === "true",
+      payment_status: (payment_status as any) || (payment_ref ? "Paid" : "Pending"),
+      payment_ref: payment_ref || "",
+      payment_screenshot_url,
+      manuscript_url,
+      review_status: "Pending Review",
+    });
+
+    if (email) {
+      sendNotificationEmail({
+        to: email,
+        subject: `Abstract Submission Received: ${abstract_title}`,
+        message: `Dear ${author_name},\n\nThank you for submitting your abstract to "Interdisciplinary Horizons 2026".\n\nSubmission ID: ${submission.id}\nTitle: ${abstract_title}\nStatus: Pending Review\nFee Status: ${submission.payment_status}\n\nAcademic Development Forum\nhttps://adf.org.in`,
+      }).catch((e) => console.warn("[AbstractController] Email notification error:", e));
+    }
+
+    res.json({ success: true, submission });
+  } catch (err: any) {
+    if (err instanceof UploadError) {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error("[AbstractController] Submission error:", err);
+    res.status(500).json({ error: "Failed to process abstract submission" });
+  }
+};
+
+export const updateAbstractStatus = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { review_status, admin_notes } = req.body;
+
+  try {
+    const updated = await abstractService.updateStatus(id, review_status, admin_notes);
+    if (!updated) {
+      return res.status(404).json({ error: "Submission not found" });
+    }
+
+    if (updated.email && (review_status === "Accepted" || review_status === "Revision Required")) {
+      sendNotificationEmail({
+        to: updated.email,
+        subject: `Update on your Abstract Submission: ${updated.abstract_title}`,
+        message: `Dear ${updated.author_name},\n\nYour abstract submission (${updated.id}) has been updated.\n\nNew Review Status: ${review_status}\nNotes: ${admin_notes || "No additional notes."}\n\nAcademic Development Forum`,
+      }).catch((e) => console.warn("[AbstractController] Email notification error:", e));
+    }
+
+    res.json({ success: true, submission: updated });
+  } catch (err) {
+    console.error("[AbstractController] Status update error:", err);
+    res.status(500).json({ error: "Failed to update status" });
+  }
+};
+
+export const updateAbstractPayment = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { payment_status } = req.body;
+
+  try {
+    const updated = await abstractService.updatePayment(id, payment_status);
+    if (!updated) {
+      return res.status(404).json({ error: "Submission not found" });
+    }
+    res.json({ success: true, submission: updated });
+  } catch (err) {
+    console.error("[AbstractController] Payment update error:", err);
+    res.status(500).json({ error: "Failed to update payment status" });
+  }
+};
+
+export const deleteAbstractSubmission = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    await abstractService.delete(id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[AbstractController] Delete error:", err);
+    res.status(500).json({ error: "Failed to delete abstract submission" });
+  }
+};
+
+export const updateAbstractAttachments = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const manuscript = (req.files as any)?.manuscript?.[0];
+  const paymentScreenshot = (req.files as any)?.payment_screenshot?.[0];
+
+  try {
+    let manuscript_url: string | undefined = undefined;
+    let payment_screenshot_url: string | undefined = undefined;
+
+    if (manuscript) {
+      const saved = await saveUpload(manuscript, "manuscripts");
+      manuscript_url = saved.url;
+    }
+
+    if (paymentScreenshot) {
+      const saved = await saveUpload(paymentScreenshot, "payments");
+      payment_screenshot_url = saved.url;
+    }
+
+    const updated = await abstractService.updateAttachments(id, {
+      manuscript_url,
+      payment_screenshot_url,
+    });
+
+    if (!updated) {
+      return res.status(404).json({ error: "Submission not found" });
+    }
+
+    res.json({ success: true, submission: updated });
+  } catch (err: any) {
+    if (err instanceof UploadError) {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error("[AbstractController] Update attachments error:", err);
+    res.status(500).json({ error: "Failed to update attachments" });
+  }
+};

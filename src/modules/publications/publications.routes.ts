@@ -11,7 +11,13 @@ import {
   updateChapterStage,
   deleteLiterarySubmission,
   deleteChapterVolume,
-  deleteChapterSubmission
+  deleteChapterSubmission,
+  getAbstractSubmissions,
+  submitAbstract,
+  updateAbstractStatus,
+  updateAbstractPayment,
+  deleteAbstractSubmission,
+  updateAbstractAttachments,
 } from "./publications.controller.js";
 import { upload } from "../submissions/submissions.controller.js"; // Reuse multer upload
 
@@ -46,5 +52,21 @@ router.post(
 router.get("/chapters/admin", getChapterSubmissions);
 router.patch("/chapters/admin/:id/stage", updateChapterStage);
 router.delete("/chapters/admin/:id", deleteChapterSubmission);
+
+// --- CALL FOR ABSTRACTS ---
+router.post(
+  "/abstracts/submit",
+  upload.fields([{ name: "manuscript", maxCount: 1 }, { name: "payment_screenshot", maxCount: 1 }]),
+  submitAbstract
+);
+router.get("/abstracts/admin", getAbstractSubmissions);
+router.patch("/abstracts/admin/:id/status", updateAbstractStatus);
+router.patch("/abstracts/admin/:id/payment", updateAbstractPayment);
+router.delete("/abstracts/admin/:id", deleteAbstractSubmission);
+router.patch(
+  "/abstracts/admin/:id/attachments",
+  upload.fields([{ name: "manuscript", maxCount: 1 }, { name: "payment_screenshot", maxCount: 1 }]),
+  updateAbstractAttachments
+);
 
 export default router;

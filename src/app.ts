@@ -35,18 +35,28 @@ app.use(cookieParser());
 app.use(express.json());
 app.use(requestTiming);
 app.use(
-  "/uploads",
+  ["/uploads", "/adf/uploads"],
+  (req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    if (req.path.endsWith(".docx") || req.path.endsWith(".doc")) {
+      const filename = req.path.split("/").pop() || "manuscript.docx";
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    } else if (req.path.endsWith(".pdf")) {
+      const filename = req.path.split("/").pop() || "manuscript.pdf";
+      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+    }
+    next();
+  },
   express.static(UPLOADS_ROOT, {
     index: false,
     dotfiles: "deny",
     maxAge: "30d",
-    immutable: true,
     setHeaders(res) {
       res.setHeader("X-Content-Type-Options", "nosniff");
-      res.setHeader(
-        "Content-Security-Policy",
-        "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox"
-      );
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     },
   })
 );
